@@ -136,6 +136,53 @@ export const CLOUD_WORD_ANALYSIS_SCHEMA: Record<string, unknown> = {
   required: ['mainVerbs', 'spans', 'constructs', 'difficulty'],
 };
 
+/**
+ * 25語以上の長文向け 2 段階クラウド解析・1 段目用スキーマ
+ * （主節の S・V と等位接続詞でつながる節の区切りだけを出力させる）
+ */
+export const CLOUD_CLAUSE_SKELETON_SCHEMA: Record<string, unknown> = {
+  type: 'OBJECT',
+  properties: {
+    clauses: {
+      type: 'ARRAY',
+      minItems: 1,
+      items: {
+        type: 'OBJECT',
+        properties: {
+          startWord: { type: 'INTEGER' },
+          endWord: { type: 'INTEGER' },
+          coordinatorWord: { type: 'INTEGER' },
+          subjects: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                startWord: { type: 'INTEGER' },
+                endWord: { type: 'INTEGER' },
+              },
+              required: ['startWord', 'endWord'],
+            },
+          },
+          mainVerbs: {
+            type: 'ARRAY',
+            minItems: 1,
+            items: {
+              type: 'OBJECT',
+              properties: {
+                startWord: { type: 'INTEGER' },
+                endWord: { type: 'INTEGER' },
+              },
+              required: ['startWord', 'endWord'],
+            },
+          },
+        },
+        required: ['startWord', 'endWord', 'subjects', 'mainVerbs'],
+      },
+    },
+  },
+  required: ['clauses'],
+};
+
 /** 検証エラー種別コード */
 export type AnalysisValidationErrorCode =
   | 'INVALID_JSON'
@@ -199,6 +246,92 @@ export function findMainVerbSpans(spans: AnalysisSpan[]): AnalysisSpan[] {
           other.role !== 'V' && other.start <= v.start && v.end <= other.end,
       ),
   );
+}
+
+const INNER_CLAUSE_ROLES = new Set<SpanRole>(['S', 'V', 'O', 'C']);
+const SOC_ROLES = new Set<SpanRole>(['S', 'O', 'C']);
+const SPAN_WORD_REGEX =
+  /\[MATH\]|(?:[$€£¥](?=\d))?[\p{L}\p{N}]+(?:['’\-./][\p{L}\p{N}]+)*%?/gu;
+
+/** スパン内テキストに含まれる単語数を数える（[MATH] や D-Adaptation は 1 語） */
+function countSpanWords(text: string): number {
+  const matches = text.match(SPAN_WORD_REGEX);
+  return matches ? matches.length : 0;
+}
+
+/**
+ * 1 語だけで構成される S・O・C（例: We, It, D-Adaptation, [MATH]）から
+ * 名詞句括弧 [ ]（bracket: "noun"）を取り除いて正規化する。
+ * AI の出力と正解ラベルの両方に同じルールを適用する。
+ */
+export function normalizeSingleWordSocBrackets(
+  sentence: string,
+  spans: AnalysisSpan[],
+): AnalysisSpan[] {
+  return spans.map((span) => {
+    if (!SOC_ROLES.has(span.role) || span.bracket !== 'noun') {
+      return span;
+    }
+    const slice = sentence.slice(span.start, span.end);
+    if (countSpanWords(slice) > 1) {
+      return span;
+    }
+    const next: AnalysisSpan = {
+      start: span.start,
+      end: span.end,
+      role: span.role,
+    };
+    if (span.modifies !== undefined) {
+      next.modifies = span.modifies;
+    }
+    return next;
+  });
+}
+
+/**
+ * S・O・C・modifier の内側（厳密包含）にある S・V・O・C スパンを取り除く。
+ * modifier の入れ子は保持し、削除に伴って残存スパンの modifies インデックスを安全に再マップする。
+ */
+export function stripNestedClauseElements(spans: AnalysisSpan[]): AnalysisSpan[] {
+  const keptOldIndices: number[] = [];
+  const oldToNew = new Map<number, number>();
+
+  for (let i = 0; i < spans.length; i++) {
+    const span = spans[i];
+    const isNestedClauseRole =
+      INNER_CLAUSE_ROLES.has(span.role) &&
+      spans.some(
+        (other, j) =>
+          j !== i &&
+          other.role !== 'V' &&
+          other.start <= span.start &&
+          span.end <= other.end,
+      );
+
+    if (!isNestedClauseRole) {
+      oldToNew.set(i, keptOldIndices.length);
+      keptOldIndices.push(i);
+    }
+  }
+
+  return keptOldIndices.map((oldIdx) => {
+    const span = spans[oldIdx];
+    const next: AnalysisSpan = {
+      start: span.start,
+      end: span.end,
+      role: span.role,
+    };
+    if (span.bracket !== undefined) {
+      next.bracket = span.bracket;
+    }
+    if (span.modifies !== undefined) {
+      const remapped = oldToNew.get(span.modifies);
+      if (remapped !== undefined && remapped !== oldToNew.get(oldIdx)) {
+        next.modifies = remapped;
+      }
+    }
+    return next;
+  });
 }
 
 /**
@@ -434,8 +567,13 @@ export function validateAnalysis(sentence: string, raw: unknown): Analysis {
     );
   }
 
+  // S・O・C・modifier の内側にある S・V・O・C を取り除き、modifier の入れ子だけを残す
+  const cleanedSpans = stripNestedClauseElements(spans);
+  // 1 語の S・O・C（We, It, D-Adaptation, [MATH] 等）からは [ ]（bracket: "noun"）を外す
+  const normalizedSpans = normalizeSingleWordSocBrackets(sentence, cleanedSpans);
+
   return {
-    spans,
+    spans: normalizedSpans,
     constructs,
     difficulty: obj.difficulty,
   };

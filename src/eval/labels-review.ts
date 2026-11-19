@@ -19,7 +19,7 @@ export function formatLabelsReviewMarkdown(
     '# χ読 評価データ正解ラベル確認シート',
     '',
     'このファイルは `npm run eval:labels` で自動生成されています。',
-    '正解ラベルを修正する場合は `tests/eval/sentences.json` または `tests/eval/dev-sentences.json` を編集し、`npm run eval:labels` と `npm test` を再実行してください。',
+    '正解ラベルを修正する場合は `tests/eval/` 配下の該当 JSON（`sentences.json` / `dev-sentences.json` / `long-sentences.json` / `long-dev-sentences.json`）を編集し、`npm run eval:labels` と `npm test` を再実行してください。',
     '',
   ];
 
@@ -45,6 +45,10 @@ export function formatLabelsReviewMarkdown(
         `### ${item.id}（カテゴリ: \`${item.category}\` / 難易度: ${item.expected.difficulty}）`,
       );
       lines.push('');
+      if (item.sourceUrl) {
+        lines.push(`- **出典**: ${item.sourceUrl}`);
+        lines.push('');
+      }
       lines.push(`> ${item.text}`);
       lines.push('');
       lines.push('```text');

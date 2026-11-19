@@ -1,21 +1,56 @@
 import { AI_CONSTRUCT_IDS, CONSTRUCT_IDS } from '../lang/en/constructs';
-import type { Analysis, AnalyzeResult, ConstructId, RetryErrorRecord } from '../types';
+import type { AnalyzeResult, ConstructId, RetryErrorRecord } from '../types';
 import {
   buildAnalysisInitialPrompts,
   buildAnalysisSystemPrompt,
   buildAnalysisUserPrompt,
+  buildClauseSkeletonFewShotTurns,
+  buildClauseSkeletonSystemPrompt,
+  buildClauseSkeletonUserPrompt,
   buildRetryFeedbackPrompt,
+  type ClauseSkeletonItem,
 } from './prompt';
-import { AnalysisValidationError, CLOUD_WORD_ANALYSIS_SCHEMA } from './schema';
-import { convertWordAnalysisToCharAnalysis, tokenizeWords } from './tokenizer';
+import {
+  acquireCloudRateLimitSlot,
+  extractTransientRetryWaitMs,
+  sleepWithAbort,
+} from './rate-limiter';
+import {
+  AnalysisValidationError,
+  CLOUD_CLAUSE_SKELETON_SCHEMA,
+  CLOUD_WORD_ANALYSIS_SCHEMA,
+} from './schema';
+import {
+  convertWordAnalysisToCharAnalysisWithRepairs,
+  tokenizeWords,
+  type ConvertedWordAnalysisResult,
+  type WordToken,
+} from './tokenizer';
 
 /** クラウドフォールバックで使用する既定モデル（定数差し替え可能） */
 export const DEFAULT_CLOUD_MODEL = 'gemini-3.1-flash-lite';
 
+/** 2段階解析（auto モード時）を発動する単語数のしきい値 */
+export const LONG_SENTENCE_TWO_STAGE_WORDS = 25;
+
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+export type CloudPromptMode = 'one-stage' | 'two-stage' | 'auto';
+
+export interface Stage1SkeletonProgress {
+  clauses: ClauseSkeletonItem[];
+  stage1Ms: number;
+  waitMs: number;
+}
 
 export interface AnalyzeWithCloudOptions {
   model?: string;
+  /** 'auto'（既定・25語以上のみ2段階） / 'one-stage' / 'two-stage'（強制2段階） */
+  cloudPromptMode?: CloudPromptMode;
+  /** auto モードで 2段階解析を使う最小単語数（既定 25） */
+  twoStageMinWords?: number;
+  /** 2段階解析の 1 段目（主節 S・V と節の区切り）が完了した直後に呼ばれる通知コールバック */
+  onStage1Complete?: (progress: Stage1SkeletonProgress) => void;
   signal?: AbortSignal;
 }
 
@@ -37,67 +72,106 @@ interface GeminiGenerateContentResponse {
   };
 }
 
-/** Gemini REST API にリクエストしてレスポンステキストを返す */
+interface GeminiApiCallResult {
+  rawText: string;
+  /** 実際の API 応答待ち時間（ms、レート制限・429/503 待機を除く） */
+  apiMs: number;
+  /** 15 RPM 調整および 429/503 リトライで待機した合計時間（ms） */
+  waitMs: number;
+}
+
+/**
+ * Gemini REST API にリクエストしてレスポンステキストと所要時間内訳を返す。
+ * 共有レートリミッタ（15回/分）を通し、一時的な HTTP 429 / 503 は 1 回だけ待機リトライする。
+ */
 async function callGeminiApi(
   endpoint: string,
   apiKey: string,
   contents: GeminiContentTurn[],
   signal?: AbortSignal,
-): Promise<string> {
+  overrides?: {
+    systemPrompt?: string;
+    responseSchema?: Record<string, unknown>;
+    errorLabel?: string;
+  },
+): Promise<GeminiApiCallResult> {
   const body = {
     systemInstruction: {
-      parts: [{ text: buildAnalysisSystemPrompt() }],
+      parts: [{ text: overrides?.systemPrompt ?? buildAnalysisSystemPrompt() }],
     },
     contents,
     generationConfig: {
       temperature: 0,
       responseMimeType: 'application/json',
-      responseSchema: CLOUD_WORD_ANALYSIS_SCHEMA,
+      responseSchema: overrides?.responseSchema ?? CLOUD_WORD_ANALYSIS_SCHEMA,
     },
   };
+  const bodyJson = JSON.stringify(body);
+  const label = overrides?.errorLabel ?? 'クラウド Gemini API';
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
+  let totalWaitMs = 0;
+  let totalApiMs = 0;
 
-  if (!response.ok) {
-    let detail = `${response.status} ${response.statusText}`;
-    try {
-      const errBody = (await response.json()) as GeminiGenerateContentResponse;
-      if (errBody?.error?.message) {
-        detail = `${response.status}: ${errBody.error.message}`;
+  for (let transientAttempt = 0; transientAttempt < 2; transientAttempt++) {
+    totalWaitMs += await acquireCloudRateLimitSlot(signal);
+
+    const reqStart = performance.now();
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: bodyJson,
+      signal,
+    });
+    const reqMs = Math.round(performance.now() - reqStart);
+
+    if (!response.ok) {
+      let detail = `${response.status} ${response.statusText}`;
+      try {
+        const errBody = (await response.json()) as GeminiGenerateContentResponse;
+        if (errBody?.error?.message) {
+          detail = `${response.status}: ${errBody.error.message}`;
+        }
+      } catch {
+        // レスポンス本文が JSON でない場合はステータスのみ使用
       }
-    } catch {
-      // レスポンス本文が JSON でない場合はステータスのみ使用
+
+      if (
+        (response.status === 429 || response.status === 503) &&
+        transientAttempt === 0
+      ) {
+        const retryWaitMs = extractTransientRetryWaitMs(response.status, detail);
+        await sleepWithAbort(retryWaitMs, signal);
+        totalWaitMs += retryWaitMs;
+        continue;
+      }
+
+      throw new Error(`${label} の呼び出しに失敗しました（${detail}）。`);
     }
-    throw new Error(
-      `クラウド Gemini API の呼び出しに失敗しました（${detail}）。`,
-    );
+
+    totalApiMs += reqMs;
+    const data = (await response.json()) as GeminiGenerateContentResponse;
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    if (!rawText) {
+      throw new AnalysisValidationError(
+        'INVALID_JSON',
+        `${label} から空の応答が返されました。`,
+        data,
+      );
+    }
+    return { rawText, apiMs: totalApiMs, waitMs: totalWaitMs };
   }
 
-  const data = (await response.json()) as GeminiGenerateContentResponse;
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  if (!rawText) {
-    throw new AnalysisValidationError(
-      'INVALID_JSON',
-      'クラウド Gemini API から空の応答が返されました。',
-      data,
-    );
-  }
-  return rawText;
+  throw new Error(`${label} の呼び出しに失敗しました。`);
 }
 
 function parseAndValidateCloudOutput(
   sentence: string,
   rawText: string,
   tokens: ReturnType<typeof tokenizeWords>,
-): Analysis {
+): ConvertedWordAnalysisResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);
@@ -112,7 +186,7 @@ function parseAndValidateCloudOutput(
   }
 
   try {
-    return convertWordAnalysisToCharAnalysis(sentence, parsed, tokens);
+    return convertWordAnalysisToCharAnalysisWithRepairs(sentence, parsed, tokens);
   } catch (err) {
     if (err instanceof AnalysisValidationError) {
       err.rawText = rawText;
@@ -121,10 +195,103 @@ function parseAndValidateCloudOutput(
   }
 }
 
+/** 2段階解析 1 段目の出力 JSON（clauses）を検証して ClauseSkeletonItem[] へ正規化する */
+function parseClauseSkeletonOutput(
+  sentence: string,
+  rawText: string,
+  tokens: WordToken[],
+): ClauseSkeletonItem[] {
+  const isValidWordRange = (sw: unknown, ew: unknown): boolean =>
+    typeof sw === 'number' &&
+    typeof ew === 'number' &&
+    Number.isInteger(sw) &&
+    Number.isInteger(ew) &&
+    sw >= 0 &&
+    ew >= sw &&
+    ew < tokens.length;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    return [];
+  }
+
+  const rawClauses = (parsed as { clauses?: unknown })?.clauses;
+  if (!Array.isArray(rawClauses)) return [];
+
+  const result: ClauseSkeletonItem[] = [];
+  for (const entry of rawClauses) {
+    if (!entry || typeof entry !== 'object') continue;
+    const c = entry as Record<string, unknown>;
+    if (!isValidWordRange(c.startWord, c.endWord)) continue;
+
+    const subjects: ClauseSkeletonItem['subjects'] = [];
+    if (Array.isArray(c.subjects)) {
+      for (const s of c.subjects) {
+        if (s && typeof s === 'object') {
+          const sr = s as Record<string, unknown>;
+          if (isValidWordRange(sr.startWord, sr.endWord)) {
+            const sw = sr.startWord as number;
+            const ew = sr.endWord as number;
+            subjects.push({
+              startWord: sw,
+              endWord: ew,
+              text: sentence.slice(tokens[sw].start, tokens[ew].end),
+            });
+          }
+        }
+      }
+    }
+
+    const mainVerbs: ClauseSkeletonItem['mainVerbs'] = [];
+    if (Array.isArray(c.mainVerbs)) {
+      for (const v of c.mainVerbs) {
+        if (v && typeof v === 'object') {
+          const vr = v as Record<string, unknown>;
+          if (isValidWordRange(vr.startWord, vr.endWord)) {
+            const sw = vr.startWord as number;
+            const ew = vr.endWord as number;
+            mainVerbs.push({
+              startWord: sw,
+              endWord: ew,
+              text: sentence.slice(tokens[sw].start, tokens[ew].end),
+            });
+          }
+        }
+      }
+    }
+
+    if (mainVerbs.length === 0) continue;
+
+    const item: ClauseSkeletonItem = {
+      startWord: c.startWord as number,
+      endWord: c.endWord as number,
+      subjects,
+      mainVerbs,
+    };
+
+    if (
+      typeof c.coordinatorWord === 'number' &&
+      Number.isInteger(c.coordinatorWord) &&
+      c.coordinatorWord >= 0 &&
+      c.coordinatorWord < tokens.length
+    ) {
+      item.coordinatorWord = c.coordinatorWord;
+      item.coordinatorText = tokens[c.coordinatorWord].text;
+    }
+
+    result.push(item);
+  }
+
+  return result;
+}
+
 /**
  * クラウドの Gemini API（Flash-Lite 系）で 1 文を構造解析する。
  * 検証失敗時は失敗理由を添えて 1 回だけ再試行する。
- * ユーザーが設定画面（または評価用 .env.local）で API キーを設定している場合のみ呼び出す。
+ * 長い文（25語以上）では cloudPromptMode: 'auto' または 'two-stage' により
+ * 「1段目：主節の S・V と等位節の区切り → 2段目：細部構造」の 2 段階解析を実行できる。
  */
 export async function analyzeWithCloud(
   sentence: string,
@@ -158,6 +325,51 @@ export async function analyzeWithCloud(
   const endpoint = `${GEMINI_API_BASE}/${encodeURIComponent(model)}:generateContent`;
   const startedAt = performance.now();
 
+  const promptMode: CloudPromptMode = options?.cloudPromptMode ?? 'auto';
+  const minWords = options?.twoStageMinWords ?? LONG_SENTENCE_TWO_STAGE_WORDS;
+  const useTwoStage =
+    promptMode === 'two-stage' ||
+    (promptMode === 'auto' && tokens.length >= minWords);
+
+  let stage1Ms: number | undefined;
+  let totalWaitMs = 0;
+  let clauseSkeleton: ClauseSkeletonItem[] | undefined;
+
+  if (useTwoStage) {
+    const stage1Contents: GeminiContentTurn[] = [
+      ...buildClauseSkeletonFewShotTurns(),
+      {
+        role: 'user',
+        parts: [{ text: buildClauseSkeletonUserPrompt(trimmed, tokens) }],
+      },
+    ];
+    const stage1Res = await callGeminiApi(
+      endpoint,
+      trimmedKey,
+      stage1Contents,
+      options?.signal,
+      {
+        systemPrompt: buildClauseSkeletonSystemPrompt(),
+        responseSchema: CLOUD_CLAUSE_SKELETON_SCHEMA,
+      },
+    );
+    stage1Ms = stage1Res.apiMs;
+    totalWaitMs += stage1Res.waitMs;
+    const parsedSkeleton = parseClauseSkeletonOutput(
+      trimmed,
+      stage1Res.rawText,
+      tokens,
+    );
+    if (parsedSkeleton.length > 0) {
+      clauseSkeleton = parsedSkeleton;
+      options?.onStage1Complete?.({
+        clauses: parsedSkeleton,
+        stage1Ms,
+        waitMs: totalWaitMs,
+      });
+    }
+  }
+
   const fewShotContents: GeminiContentTurn[] = buildAnalysisInitialPrompts()
     .filter((m) => m.role !== 'system')
     .map((m) => ({
@@ -167,27 +379,40 @@ export async function analyzeWithCloud(
 
   const userTurn: GeminiContentTurn = {
     role: 'user',
-    parts: [{ text: buildAnalysisUserPrompt(trimmed, tokens) }],
+    parts: [
+      {
+        text: buildAnalysisUserPrompt(
+          trimmed,
+          tokens,
+          undefined,
+          clauseSkeleton,
+        ),
+      },
+    ],
   };
 
   let attempts = 1;
   let firstAttemptError: RetryErrorRecord | undefined;
-  let rawText = await callGeminiApi(
+  const stage2Res = await callGeminiApi(
     endpoint,
     trimmedKey,
     [...fewShotContents, userTurn],
     options?.signal,
   );
+  let rawText = stage2Res.rawText;
+  const stage2Ms = stage2Res.apiMs;
+  totalWaitMs += stage2Res.waitMs;
+  let retryMs = 0;
 
-  let analysis: Analysis;
+  let converted: ConvertedWordAnalysisResult;
   try {
-    analysis = parseAndValidateCloudOutput(trimmed, rawText, tokens);
+    converted = parseAndValidateCloudOutput(trimmed, rawText, tokens);
   } catch (firstErr) {
     if (!(firstErr instanceof AnalysisValidationError)) {
       throw firstErr;
     }
 
-    // 検証エラー時は失敗理由を添えて 1 回だけ再試行する
+    // 自動修復で直らないエラー時は失敗理由を添えて 1 回だけ再試行する
     firstAttemptError = {
       code: firstErr.code,
       message: firstErr.message,
@@ -202,15 +427,18 @@ export async function analyzeWithCloud(
       { role: 'user', parts: [{ text: buildRetryFeedbackPrompt(firstErr) }] },
     ];
 
-    rawText = await callGeminiApi(
+    const retryRes = await callGeminiApi(
       endpoint,
       trimmedKey,
       retryTurns,
       options?.signal,
     );
+    rawText = retryRes.rawText;
+    retryMs = retryRes.apiMs;
+    totalWaitMs += retryRes.waitMs;
 
     try {
-      analysis = parseAndValidateCloudOutput(trimmed, rawText, tokens);
+      converted = parseAndValidateCloudOutput(trimmed, rawText, tokens);
     } catch (secondErr) {
       if (secondErr instanceof AnalysisValidationError) {
         const analyzeMs = Math.round(performance.now() - startedAt);
@@ -221,6 +449,10 @@ export async function analyzeWithCloud(
           sessionCreateMs: 0,
           analyzeMs,
           totalMs: analyzeMs,
+          ...(stage1Ms !== undefined ? { stage1Ms } : {}),
+          stage2Ms,
+          retryMs,
+          waitMs: totalWaitMs,
         };
       }
       throw secondErr;
@@ -230,7 +462,7 @@ export async function analyzeWithCloud(
   const analyzeMs = Math.round(performance.now() - startedAt);
 
   return {
-    analysis,
+    analysis: converted.analysis,
     provider: 'cloud',
     rawText,
     elapsedMs: analyzeMs,
@@ -238,9 +470,14 @@ export async function analyzeWithCloud(
       sessionCreateMs: 0,
       analyzeMs,
       totalMs: analyzeMs,
+      ...(stage1Ms !== undefined ? { stage1Ms } : {}),
+      stage2Ms,
+      retryMs,
+      waitMs: totalWaitMs,
     },
     sessionCreated: false,
     attempts,
+    ...(converted.repaired.length > 0 ? { repaired: converted.repaired } : {}),
     ...(firstAttemptError ? { firstAttemptError } : {}),
     modelName: model,
   };
@@ -343,53 +580,18 @@ export async function classifyBatchConstructsWithCloud(
     ...items.map((item) => `[${item.id}] ${item.text}`),
   ].join('\n');
 
-  const body = {
-    systemInstruction: {
-      parts: [{ text: buildBatchConstructsSystemPrompt() }],
-    },
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: userText }],
-      },
-    ],
-    generationConfig: {
-      temperature: 0,
-      responseMimeType: 'application/json',
+  const apiResult = await callGeminiApi(
+    endpoint,
+    trimmedKey,
+    [{ role: 'user', parts: [{ text: userText }] }],
+    options?.signal,
+    {
+      systemPrompt: buildBatchConstructsSystemPrompt(),
       responseSchema: CLOUD_BATCH_CONSTRUCTS_SCHEMA,
+      errorLabel: 'クラウド Gemini API（バッチ構文判定）',
     },
-  };
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': trimmedKey,
-    },
-    body: JSON.stringify(body),
-    signal: options?.signal,
-  });
-
-  if (!response.ok) {
-    let detail = `${response.status} ${response.statusText}`;
-    try {
-      const errBody = (await response.json()) as GeminiGenerateContentResponse;
-      if (errBody?.error?.message) {
-        detail = `${response.status}: ${errBody.error.message}`;
-      }
-    } catch {
-      // JSON でない場合はステータスのみ使用
-    }
-    throw new Error(
-      `クラウド Gemini API（バッチ構文判定）の呼び出しに失敗しました（${detail}）。`,
-    );
-  }
-
-  const data = (await response.json()) as GeminiGenerateContentResponse;
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  if (!rawText) {
-    throw new Error('クラウド Gemini API（バッチ構文判定）から空の応答が返されました。');
-  }
+  );
+  const rawText = apiResult.rawText;
 
   let parsed: unknown;
   try {

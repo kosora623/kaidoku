@@ -1,0 +1,316 @@
+[
+  {
+    "id": "long-dev-01",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2611.24931v1",
+    "text": "Such routing strategy spaces differ from the singleton structure underlying network Cournot games, so that result neither gives our restricted hardness instances nor conflicts with our positive results.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 28,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 29,
+          "end": 35,
+          "role": "V"
+        },
+        {
+          "start": 36,
+          "end": 97,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 65,
+          "end": 97,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        },
+        {
+          "start": 102,
+          "end": 113,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 122,
+          "end": 127,
+          "role": "V"
+        },
+        {
+          "start": 128,
+          "end": 161,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 166,
+          "end": 175,
+          "role": "V"
+        },
+        {
+          "start": 176,
+          "end": 201,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 7
+        }
+      ],
+      "constructs": [
+        "participle_modifier",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-dev-02",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2611.24931v1",
+    "text": "A source has at most [MATH] distinct opponents: an outgoing chain has [MATH] first-layer opponents, an incoming chain has [MATH] last-layer opponents, and there are at most twelve chains of each kind.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 8,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 9,
+          "end": 12,
+          "role": "V"
+        },
+        {
+          "start": 13,
+          "end": 46,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 48,
+          "end": 65,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 66,
+          "end": 69,
+          "role": "V"
+        },
+        {
+          "start": 70,
+          "end": 98,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 100,
+          "end": 117,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 118,
+          "end": 121,
+          "role": "V"
+        },
+        {
+          "start": 122,
+          "end": 149,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 161,
+          "end": 164,
+          "role": "V"
+        },
+        {
+          "start": 165,
+          "end": 199,
+          "role": "S",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-dev-03",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2312.11805v5",
+    "text": "The GSPMD partitioner (Xu et al., 2021) in the XLA compiler partitions the training step computation, and the MegaScale XLA compiler (XLA, 2019) pass statically schedules appropriate collectives so that they maximally overlap with the computation with very little variation in step time.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 59,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 60,
+          "end": 70,
+          "role": "V"
+        },
+        {
+          "start": 71,
+          "end": 100,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 106,
+          "end": 149,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 150,
+          "end": 160,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 5
+        },
+        {
+          "start": 161,
+          "end": 170,
+          "role": "V"
+        },
+        {
+          "start": 171,
+          "end": 194,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 195,
+          "end": 286,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 5
+        }
+      ],
+      "constructs": [
+        "long_subject",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-dev-04",
+    "category": "long",
+    "sourceUrl": "https://ar5iv.labs.arxiv.org/html/2306.05284",
+    "text": "For instance, MusicLM (Agostinelli et al. 2023) uses two models, one modeling the flattened first [MATH] codebooks, and a second one the other [MATH] flattened codebooks, conditioned on the decision of the first model.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 12,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 14,
+          "end": 47,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 48,
+          "end": 52,
+          "role": "V"
+        },
+        {
+          "start": 53,
+          "end": 217,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 69,
+          "end": 114,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 3
+        },
+        {
+          "start": 171,
+          "end": 217,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 3
+        }
+      ],
+      "constructs": [
+        "participle_modifier",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-dev-05",
+    "category": "long",
+    "sourceUrl": "https://ar5iv.labs.arxiv.org/html/2306.05284",
+    "text": "Following Kreuk et al. 2022, we use a state-of-the-art audio classifier trained for classification on AudioSet (Koutini et al. 2021) to compute the KL-divergence over the probabilities of the labels between the original and the generated music.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 27,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 29,
+          "end": 31,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 32,
+          "end": 35,
+          "role": "V"
+        },
+        {
+          "start": 36,
+          "end": 132,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 72,
+          "end": 132,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 3
+        },
+        {
+          "start": 133,
+          "end": 243,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "participial_construction",
+        "participle_modifier"
+      ],
+      "difficulty": 5
+    }
+  }
+]

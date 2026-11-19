@@ -1,4 +1,12 @@
+import type { ClauseSkeletonItem } from './ai/prompt';
+import { tokenizeWords } from './ai/tokenizer';
+import type { WordMeaningResult } from './ai/word-meaning';
 import { EN_CONSTRUCTS } from './lang/en/constructs';
+import {
+  applyRelativePageMarks,
+  calculateDifficultyAndMarkLevel,
+  countWords,
+} from './lang/en/difficulty';
 import {
   extractPageSentences,
   type ExtractedDomSentence,
@@ -6,7 +14,9 @@ import {
 import { renderNotationHtml } from './notation';
 import type {
   AnalyzeResult,
+  AnalyzeTiming,
   ConstructId,
+  MarkDensity,
   MarkedSentencePayload,
   MarkLevel,
 } from './types';
@@ -41,24 +51,44 @@ const ACTIVE_HIGHLIGHT_NAME = 'kaidoku-active';
 const STYLE_ELEMENT_ID = 'kaidoku-highlight-style';
 const SHADOW_HOST_ID = 'kaidoku-shadow-host';
 
-/** 本文 DOM を書き換えずに色付けするための ::highlight スタイルを注入する */
+/**
+ * 本文 DOM を書き換えずにマークするための ::highlight スタイルを注入する。
+ * 明るい背景・暗い背景（黒背景に白文字など）の両方で文字の可読性を保つため、
+ * 通常マークは背景色を付けず波線の下線（色と太さで 3 段階）で表現し、
+ * タップして選択中の文にだけ半透明の背景色を付ける。
+ */
 function ensureHighlightStyles(): void {
   if (document.getElementById(STYLE_ELEMENT_ID)) return;
   const style = document.createElement('style');
   style.id = STYLE_ELEMENT_ID;
   style.textContent = `
     ::highlight(${HIGHLIGHT_NAMES[1]}) {
-      background-color: rgba(254, 240, 138, 0.48);
+      background-color: transparent;
+      text-decoration-line: underline;
+      text-decoration-style: wavy;
+      text-decoration-color: rgba(217, 119, 6, 0.58);
+      text-decoration-thickness: 1.5px;
     }
     ::highlight(${HIGHLIGHT_NAMES[2]}) {
-      background-color: rgba(253, 224, 71, 0.68);
+      background-color: transparent;
+      text-decoration-line: underline;
+      text-decoration-style: wavy;
+      text-decoration-color: #f59e0b;
+      text-decoration-thickness: 2px;
     }
     ::highlight(${HIGHLIGHT_NAMES[3]}) {
-      background-color: rgba(250, 204, 21, 0.88);
-      text-decoration: underline wavy #d97706;
+      background-color: transparent;
+      text-decoration-line: underline;
+      text-decoration-style: wavy;
+      text-decoration-color: #ef4444;
+      text-decoration-thickness: 2.5px;
     }
     ::highlight(${ACTIVE_HIGHLIGHT_NAME}) {
-      background-color: rgba(147, 197, 253, 0.52);
+      background-color: rgba(59, 130, 246, 0.24);
+      text-decoration-line: underline;
+      text-decoration-style: solid;
+      text-decoration-color: rgba(59, 130, 246, 0.85);
+      text-decoration-thickness: 2px;
     }
   `;
   (document.head ?? document.documentElement).appendChild(style);
@@ -138,6 +168,7 @@ function findMarkedItemAtPoint(
   if (!node) return null;
 
   for (const item of items) {
+    if (item.payload.markLevel <= 0) continue;
     try {
       if (item.dom.range.comparePoint(node, offset) === 0) {
         return item;
@@ -149,12 +180,126 @@ function findMarkedItemAtPoint(
   return null;
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+/** 所要時間の内訳（1段目 / 2段目 / 再試行 / 429・503等待機）を日本語で整形する */
+function formatTimingBreakdown(timing: AnalyzeTiming): string {
+  const s1 = timing.stage1Ms !== undefined ? `${timing.stage1Ms} ms` : 'なし';
+  const s2 =
+    timing.stage2Ms !== undefined
+      ? `${timing.stage2Ms} ms`
+      : `${timing.analyzeMs} ms`;
+  const retry = `${timing.retryMs ?? 0} ms`;
+  const wait = `${timing.waitMs ?? 0} ms`;
+  return `合計 ${timing.analyzeMs} ms（1段目: ${s1} / 2段目: ${s2} / 再試行: ${retry} / 429・503等待機: ${wait}）`;
+}
+
+/** 2段階解析の 1 段目結果（主節 S・V と節の区切り）を文の骨組みプレビュー HTML に変換する */
+function renderStage1SkeletonHtml(
+  sentence: string,
+  clauses: ClauseSkeletonItem[],
+): string {
+  const tokens = tokenizeWords(sentence);
+  if (tokens.length === 0 || clauses.length === 0) {
+    return `<div class="notation-box">${escapeHtml(sentence)}</div>`;
+  }
+
+  // 文字範囲のマーキング（主節 S / 主節 V / 等位接続詞）を収集
+  type HighlightMark = {
+    start: number;
+    end: number;
+    kind: 'S' | 'V' | 'coord';
+  };
+  const marks: HighlightMark[] = [];
+
+  for (const c of clauses) {
+    if (
+      c.coordinatorWord !== undefined &&
+      tokens[c.coordinatorWord]
+    ) {
+      const t = tokens[c.coordinatorWord];
+      marks.push({ start: t.start, end: t.end, kind: 'coord' });
+    }
+    for (const s of c.subjects) {
+      if (tokens[s.startWord] && tokens[s.endWord]) {
+        marks.push({
+          start: tokens[s.startWord].start,
+          end: tokens[s.endWord].end,
+          kind: 'S',
+        });
+      }
+    }
+    for (const v of c.mainVerbs) {
+      if (tokens[v.startWord] && tokens[v.endWord]) {
+        marks.push({
+          start: tokens[v.startWord].start,
+          end: tokens[v.endWord].end,
+          kind: 'V',
+        });
+      }
+    }
+  }
+
+  marks.sort((a, b) => a.start - b.start || b.end - a.end);
+
+  let inlineHtml = '';
+  let cursor = 0;
+  for (const m of marks) {
+    if (m.start < cursor) continue;
+    if (m.start > cursor) {
+      inlineHtml += escapeHtml(sentence.slice(cursor, m.start));
+    }
+    const piece = escapeHtml(sentence.slice(m.start, m.end));
+    if (m.kind === 'coord') {
+      inlineHtml += `<span class="skeleton-coord">｜${piece}｜</span>`;
+    } else if (m.kind === 'S') {
+      inlineHtml += `<span class="kaidoku-span kaidoku-bracket-noun">${piece}<sup class="kaidoku-role-badge kaidoku-role-badge-S">S</sup></span>`;
+    } else {
+      inlineHtml += `<span class="kaidoku-span">${piece}<sup class="kaidoku-role-badge kaidoku-role-badge-V">V</sup></span>`;
+    }
+    cursor = m.end;
+  }
+  if (cursor < sentence.length) {
+    inlineHtml += escapeHtml(sentence.slice(cursor));
+  }
+
+  const clauseSummary = clauses
+    .map((c, idx) => {
+      const coord = c.coordinatorText
+        ? `<span class="skeleton-coord-tag">接続: ${escapeHtml(c.coordinatorText)}</span> `
+        : '';
+      const sText =
+        c.subjects.length > 0
+          ? c.subjects.map((s) => escapeHtml(s.text)).join(' / ')
+          : '（省略・共有）';
+      const vText = c.mainVerbs.map((v) => escapeHtml(v.text)).join(' / ');
+      return `<div class="skeleton-clause-item">${coord}<strong>節${idx + 1}</strong>：S = <code>${sText}</code> ／ V = <code>${vText}</code></div>`;
+    })
+    .join('');
+
+  return `
+    <div class="notation-box">${inlineHtml}</div>
+    <div class="skeleton-summary">${clauseSummary}</div>
+  `;
+}
+
 /** Shadow DOM の UI ホストを作成する（ページ CSS と完全に隔離する） */
 function createShadowUi(callbacks: {
   onRefresh: () => void;
+  onChangeDensity: (density: MarkDensity) => void;
+  onOpenReview: () => void;
   onClearMarks: () => void;
   onClosePanel: () => void;
   onFeedback: (result: 'understood' | 'unsure') => void;
+  onWordClick: (word: string) => void;
+  onSaveWord: (meaning: WordMeaningResult) => void;
 }) {
   let host = document.getElementById(SHADOW_HOST_ID);
   if (host) {
@@ -347,11 +492,180 @@ function createShadowUi(callbacks: {
         font-size: 11.5px;
         color: #475569;
       }
+      .word-hint {
+        margin: -6px 0 10px;
+        font-size: 11.5px;
+        color: #64748b;
+      }
+      .kaidoku-word {
+        cursor: pointer;
+        border-radius: 3px;
+        transition: background-color 0.12s ease;
+      }
+      .kaidoku-word:hover {
+        background: rgba(37, 99, 235, 0.16);
+        text-decoration: underline dotted #2563eb;
+      }
+      .kaidoku-word.is-selected {
+        background: rgba(37, 99, 235, 0.24);
+        outline: 1px solid rgba(37, 99, 235, 0.5);
+      }
+      .word-card {
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+      }
+      .word-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      .word-head-left {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .word-term {
+        font-family: Georgia, serif;
+        font-weight: 700;
+        font-size: 15px;
+        color: #0c4a6e;
+      }
+      .word-lemma {
+        font-size: 11.5px;
+        color: #475569;
+      }
+      .word-pos {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 999px;
+        background: #e0f2fe;
+        color: #0369a1;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .word-meaning {
+        margin: 4px 0 8px;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: #0f172a;
+      }
+      .word-card-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .word-save-btn {
+        border: 1px solid #0284c7;
+        background: #0284c7;
+        color: #ffffff;
+        border-radius: 7px;
+        padding: 5px 11px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .word-save-btn:hover:not(:disabled) {
+        background: #0369a1;
+      }
+      .word-save-btn:disabled {
+        opacity: 0.65;
+        cursor: default;
+      }
+      .word-status {
+        font-size: 11.5px;
+        color: #0369a1;
+      }
+      .density-group {
+        display: inline-flex;
+        align-items: center;
+        background: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        padding: 2px;
+        gap: 2px;
+      }
+      .density-btn {
+        border: none;
+        background: transparent;
+        color: #475569;
+        border-radius: 999px;
+        padding: 2px 7px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .density-btn.is-active {
+        background: #2563eb;
+        color: #ffffff;
+      }
+      .skeleton-banner {
+        margin: 0 0 10px;
+        padding: 7px 10px;
+        border-radius: 8px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1e40af;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .skeleton-coord {
+        display: inline-block;
+        padding: 0 4px;
+        margin: 0 2px;
+        border-radius: 4px;
+        background: #fef3c7;
+        color: #92400e;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 12.5px;
+        font-weight: 700;
+      }
+      .skeleton-summary {
+        margin: 0 0 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .skeleton-clause-item {
+        padding: 6px 10px;
+        border-radius: 7px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        font-size: 12px;
+        color: #334155;
+      }
+      .skeleton-coord-tag {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 999px;
+        background: #fef3c7;
+        color: #92400e;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .timing-line {
+        margin-top: 8px;
+        font-size: 11.5px;
+        color: #64748b;
+        line-height: 1.45;
+      }
     </style>
 
     <div class="status-bar" id="status-bar">
       <span class="logo">χ読</span>
       <span id="status-text">準備中...</span>
+      <div class="density-group" id="density-group" role="group" aria-label="マーク量の切替">
+        <button type="button" class="density-btn" data-density="low" title="スコア上位10%">少なめ</button>
+        <button type="button" class="density-btn is-active" data-density="normal" title="スコア上位20%">ふつう</button>
+        <button type="button" class="density-btn" data-density="high" title="スコア上位40%">多め</button>
+      </div>
+      <button type="button" class="bar-btn" id="review-btn">復習</button>
       <button type="button" class="bar-btn" id="refresh-btn">再判定</button>
       <button type="button" class="bar-btn" id="clear-btn">解除</button>
     </div>
@@ -363,6 +677,7 @@ function createShadowUi(callbacks: {
       </div>
       <div class="notice hidden" id="panel-notice"></div>
       <div id="panel-body"></div>
+      <div class="word-card hidden" id="word-card"></div>
       <div class="feedback-row hidden" id="feedback-row">
         <div class="fb-btns">
           <button type="button" class="fb-ok" id="btn-understood">分かった</button>
@@ -370,43 +685,122 @@ function createShadowUi(callbacks: {
         </div>
         <span class="fb-msg" id="fb-msg"></span>
       </div>
+      <div class="timing-line hidden" id="timing-line"></div>
     </div>
   `;
 
   const statusText = shadow.getElementById('status-text') as HTMLSpanElement;
+  const densityBtns = Array.from(
+    shadow.querySelectorAll<HTMLButtonElement>('.density-btn'),
+  );
+  const reviewBtn = shadow.getElementById('review-btn') as HTMLButtonElement;
   const refreshBtn = shadow.getElementById('refresh-btn') as HTMLButtonElement;
   const clearBtn = shadow.getElementById('clear-btn') as HTMLButtonElement;
   const panel = shadow.getElementById('panel') as HTMLDivElement;
   const panelNotice = shadow.getElementById('panel-notice') as HTMLDivElement;
   const panelBody = shadow.getElementById('panel-body') as HTMLDivElement;
+  const wordCard = shadow.getElementById('word-card') as HTMLDivElement;
   const closePanelBtn = shadow.getElementById('close-panel-btn') as HTMLButtonElement;
   const feedbackRow = shadow.getElementById('feedback-row') as HTMLDivElement;
   const btnUnderstood = shadow.getElementById('btn-understood') as HTMLButtonElement;
   const btnUnsure = shadow.getElementById('btn-unsure') as HTMLButtonElement;
   const fbMsg = shadow.getElementById('fb-msg') as HTMLSpanElement;
+  const timingLine = shadow.getElementById('timing-line') as HTMLDivElement;
 
+  for (const btn of densityBtns) {
+    btn.addEventListener('click', () => {
+      const d = btn.dataset.density as MarkDensity | undefined;
+      if (d === 'low' || d === 'normal' || d === 'high') {
+        callbacks.onChangeDensity(d);
+      }
+    });
+  }
+  reviewBtn.addEventListener('click', callbacks.onOpenReview);
   refreshBtn.addEventListener('click', callbacks.onRefresh);
   clearBtn.addEventListener('click', callbacks.onClearMarks);
   closePanelBtn.addEventListener('click', callbacks.onClosePanel);
   btnUnderstood.addEventListener('click', () => callbacks.onFeedback('understood'));
   btnUnsure.addEventListener('click', () => callbacks.onFeedback('unsure'));
 
+  // 解析パネル内の単語タップ（クリック／Enter・Space）をイベント委譲で処理する
+  function triggerWordSelect(targetEl: HTMLElement): void {
+    const word = targetEl.dataset.word?.trim();
+    if (!word) return;
+    for (const prev of panelBody.querySelectorAll('.kaidoku-word.is-selected')) {
+      prev.classList.remove('is-selected');
+    }
+    targetEl.classList.add('is-selected');
+    callbacks.onWordClick(word);
+  }
+
+  panelBody.addEventListener('click', (event) => {
+    const el = (event.target as HTMLElement | null)?.closest?.(
+      '.kaidoku-word',
+    ) as HTMLElement | null;
+    if (el) {
+      triggerWordSelect(el);
+    }
+  });
+
+  panelBody.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const el = (event.target as HTMLElement | null)?.closest?.(
+      '.kaidoku-word',
+    ) as HTMLElement | null;
+    if (el) {
+      event.preventDefault();
+      triggerWordSelect(el);
+    }
+  });
+
+  function clearWordCard(): void {
+    wordCard.classList.add('hidden');
+    wordCard.innerHTML = '';
+  }
+
   return {
     host,
     setStatus(text: string) {
       statusText.textContent = text;
     },
-    showPanelLoading(sentence: string) {
+    setActiveDensity(density: MarkDensity) {
+      for (const btn of densityBtns) {
+        btn.classList.toggle('is-active', btn.dataset.density === density);
+      }
+    },
+    showPanelLoading(sentence: string, isLongTwoStage = false) {
       panel.classList.remove('hidden');
       panelNotice.classList.add('hidden');
       feedbackRow.classList.add('hidden');
+      timingLine.classList.add('hidden');
+      timingLine.textContent = '';
+      clearWordCard();
       fbMsg.textContent = '';
-      panelBody.innerHTML = `<div class="notation-box"></div><p style="margin:0;color:#475569;">構文を解析しています...</p>`;
+      const loadingMsg = isLongTwoStage
+        ? '長い文のため 2 段階で解析しています（まず 1 段目で主節の S・V と節の区切りを抽出中...）'
+        : '構文を解析しています...';
+      panelBody.innerHTML = `<div class="notation-box"></div><p style="margin:0;color:#475569;">${loadingMsg}</p>`;
       const box = panelBody.querySelector('.notation-box');
       if (box) box.textContent = sentence;
     },
+    showPanelStage1(
+      sentence: string,
+      clauses: ClauseSkeletonItem[],
+      stage1Ms: number,
+      waitMs: number,
+    ) {
+      panel.classList.remove('hidden');
+      const waitNote = waitMs > 0 ? ` / 待機: ${waitMs} ms` : '';
+      panelBody.innerHTML = `
+        <div class="skeleton-banner">1段目完了（文の骨組み：主節の S・V と節の区切り）— 細部の修飾構造を解析中（2段目）...</div>
+        ${renderStage1SkeletonHtml(sentence, clauses)}
+      `;
+      timingLine.textContent = `進行中（1段目: ${stage1Ms} ms${waitNote} / 2段目: 解析中...）`;
+      timingLine.classList.remove('hidden');
+    },
     showPanelResult(sentence: string, result: AnalyzeResult) {
       panel.classList.remove('hidden');
+      clearWordCard();
       if (result.noticeMessage) {
         panelNotice.textContent = result.noticeMessage;
         panelNotice.classList.remove('hidden');
@@ -425,16 +819,113 @@ function createShadowUi(callbacks: {
               .join('');
 
       panelBody.innerHTML = `
-        <div class="notation-box">${renderNotationHtml(sentence, result.analysis)}</div>
+        <div class="notation-box">${renderNotationHtml(sentence, result.analysis, { clickableWords: true })}</div>
+        <p class="word-hint">分からない単語をタップすると、この文脈での意味を表示して記録できます。</p>
         <div>${constructsHtml}</div>
       `;
       feedbackRow.classList.remove('hidden');
-      fbMsg.textContent = `${result.modelName} / ${result.timing.analyzeMs} ms`;
+      fbMsg.textContent = result.modelName;
+      timingLine.textContent = formatTimingBreakdown(result.timing);
+      timingLine.classList.remove('hidden');
+    },
+    showWordLoading(word: string) {
+      wordCard.classList.remove('hidden');
+      wordCard.innerHTML = '';
+      const p = document.createElement('div');
+      p.className = 'word-status';
+      p.textContent = `「${word}」の文脈に合う意味を調べています...`;
+      wordCard.appendChild(p);
+    },
+    showWordMeaning(meaning: WordMeaningResult) {
+      wordCard.classList.remove('hidden');
+      wordCard.innerHTML = '';
+
+      const head = document.createElement('div');
+      head.className = 'word-card-head';
+
+      const left = document.createElement('div');
+      left.className = 'word-head-left';
+
+      const term = document.createElement('span');
+      term.className = 'word-term';
+      term.textContent = meaning.word;
+      left.appendChild(term);
+
+      if (meaning.lemma.toLowerCase() !== meaning.word.toLowerCase()) {
+        const lemma = document.createElement('span');
+        lemma.className = 'word-lemma';
+        lemma.textContent = `（原形: ${meaning.lemma}）`;
+        left.appendChild(lemma);
+      }
+
+      const pos = document.createElement('span');
+      pos.className = 'word-pos';
+      pos.textContent = meaning.partOfSpeech;
+      left.appendChild(pos);
+
+      const closeWordBtn = document.createElement('button');
+      closeWordBtn.type = 'button';
+      closeWordBtn.className = 'bar-btn';
+      closeWordBtn.textContent = '×';
+      closeWordBtn.setAttribute('aria-label', '単語表示を閉じる');
+      closeWordBtn.addEventListener('click', clearWordCard);
+
+      head.appendChild(left);
+      head.appendChild(closeWordBtn);
+
+      const meaningEl = document.createElement('p');
+      meaningEl.className = 'word-meaning';
+      meaningEl.textContent = meaning.meaningJa;
+
+      const actions = document.createElement('div');
+      actions.className = 'word-card-actions';
+
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'word-save-btn';
+      saveBtn.textContent = '元の文ごと記録する';
+
+      const statusSpan = document.createElement('span');
+      statusSpan.className = 'word-status';
+      statusSpan.id = 'word-save-status';
+
+      saveBtn.addEventListener('click', () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = '記録中...';
+        callbacks.onSaveWord(meaning);
+      });
+
+      actions.appendChild(saveBtn);
+      actions.appendChild(statusSpan);
+
+      wordCard.appendChild(head);
+      wordCard.appendChild(meaningEl);
+      wordCard.appendChild(actions);
+    },
+    setWordSaveResult(success: boolean, message: string) {
+      const saveBtn = wordCard.querySelector<HTMLButtonElement>('.word-save-btn');
+      const statusSpan = wordCard.querySelector<HTMLSpanElement>('#word-save-status');
+      if (saveBtn) {
+        saveBtn.disabled = success;
+        saveBtn.textContent = success ? '記録済み' : '元の文ごと記録する';
+      }
+      if (statusSpan) {
+        statusSpan.textContent = message;
+      }
+    },
+    showWordError(message: string) {
+      wordCard.classList.remove('hidden');
+      wordCard.innerHTML = '';
+      const errDiv = document.createElement('div');
+      errDiv.className = 'error';
+      errDiv.textContent = message;
+      wordCard.appendChild(errDiv);
     },
     showPanelError(message: string) {
       panel.classList.remove('hidden');
       panelNotice.classList.add('hidden');
       feedbackRow.classList.add('hidden');
+      clearWordCard();
       panelBody.innerHTML = '';
       const errDiv = document.createElement('div');
       errDiv.className = 'error';
@@ -445,6 +936,7 @@ function createShadowUi(callbacks: {
       fbMsg.textContent = msg;
     },
     hidePanel() {
+      clearWordCard();
       panel.classList.add('hidden');
     },
     destroy() {
@@ -459,19 +951,70 @@ function initKaidokuContent(): void {
   window.__kaidokuContentInitialized = true;
 
   let markedItems: MarkedItemRuntime[] = [];
+  let totalPageSentences = 0;
+  let currentDensity: MarkDensity = 'normal';
+  let lastSourceLabel = '';
   let activeItem: MarkedItemRuntime | null = null;
   let activeAnalysis: AnalyzeResult | null = null;
+  let currentAnalyzeRequestId: string | null = null;
   let ui: ReturnType<typeof createShadowUi> | null = null;
+
+  /** 手元の判定済みスコアに対して現在の密度（10% / 20% / 40%）を適用し、API なしで即時再描画する */
+  function reapplyRelativeMarks(density: MarkDensity): void {
+    currentDensity = density;
+    ui?.setActiveDensity(density);
+
+    const levelMap = applyRelativePageMarks(
+      markedItems.map((item) => ({
+        id: item.payload.id,
+        hardnessScore: item.payload.hardnessScore,
+        weakConstructsHit: item.payload.weakConstructsHit,
+        viewportOrder: item.dom.viewportOrder,
+      })),
+      {
+        totalPageSentences,
+        density,
+      },
+    );
+
+    let markedCount = 0;
+    for (const item of markedItems) {
+      const lvl = levelMap.get(item.payload.id) ?? 0;
+      item.payload.markLevel = lvl;
+      if (lvl > 0) markedCount += 1;
+    }
+
+    applyHighlights(markedItems);
+    if (activeItem) {
+      setActiveHighlight(activeItem.dom.range);
+    }
+
+    const suffix = lastSourceLabel ? `（${lastSourceLabel}）` : '';
+    ui?.setStatus(
+      `全 ${totalPageSentences} 文中 ${markedCount} 文をマーク${suffix}`,
+    );
+  }
 
   async function runMarking(forceRefresh = false): Promise<void> {
     if (!ui) {
       ui = createShadowUi({
         onRefresh: () => void runMarking(true),
+        onChangeDensity: (density) => {
+          reapplyRelativeMarks(density);
+          void chrome.runtime.sendMessage({
+            type: 'SET_MARK_DENSITY',
+            density,
+          });
+        },
+        onOpenReview: () => {
+          void chrome.runtime.sendMessage({ type: 'OPEN_REVIEW_PAGE' });
+        },
         onClearMarks: () => {
           clearAllHighlights();
           markedItems = [];
           activeItem = null;
           activeAnalysis = null;
+          currentAnalyzeRequestId = null;
           ui?.destroy();
           ui = null;
         },
@@ -479,7 +1022,75 @@ function initKaidokuContent(): void {
           setActiveHighlight(null);
           activeItem = null;
           activeAnalysis = null;
+          currentAnalyzeRequestId = null;
           ui?.hidePanel();
+        },
+        onWordClick: (word) => {
+          if (!activeItem) return;
+          const targetSentence = activeItem.dom.text;
+          ui?.showWordLoading(word);
+          void chrome.runtime
+            .sendMessage({
+              type: 'LOOKUP_WORD_MEANING',
+              word,
+              sentence: targetSentence,
+            })
+            .then(
+              (res: { ok?: boolean; data?: WordMeaningResult; error?: string }) => {
+                if (!res?.ok || !res.data) {
+                  ui?.showWordError(
+                    res?.error ?? '単語の意味を取得できませんでした。',
+                  );
+                  return;
+                }
+                ui?.showWordMeaning(res.data);
+              },
+            )
+            .catch((err) => {
+              ui?.showWordError(
+                err instanceof Error ? err.message : String(err),
+              );
+            });
+        },
+        onSaveWord: (meaning) => {
+          if (!activeItem) return;
+          void chrome.runtime
+            .sendMessage({
+              type: 'SAVE_WORD_ENTRY',
+              word: meaning.word,
+              meaning: meaning.meaningJa,
+              text: activeItem.dom.text,
+              pageUrl: window.location.href,
+              pageTitle: document.title,
+              analysis: activeAnalysis?.analysis,
+            })
+            .then(
+              (res: {
+                ok?: boolean;
+                data?: { created: boolean };
+                error?: string;
+              }) => {
+                if (!res?.ok) {
+                  ui?.setWordSaveResult(
+                    false,
+                    res?.error ?? '単語の保存に失敗しました。',
+                  );
+                  return;
+                }
+                ui?.setWordSaveResult(
+                  true,
+                  res.data?.created
+                    ? '復習カードに追加しました'
+                    : '記録済みの単語を更新しました',
+                );
+              },
+            )
+            .catch((err) => {
+              ui?.setWordSaveResult(
+                false,
+                err instanceof Error ? err.message : String(err),
+              );
+            });
         },
         onFeedback: (result) => {
           if (!activeItem || !activeAnalysis) return;
@@ -497,13 +1108,48 @@ function initKaidokuContent(): void {
               result,
               analysis: activeAnalysis.analysis,
             })
-            .then(() => {
-              ui?.setFeedbackMessage(
-                result === 'unsure'
-                  ? '苦手構文として記録しました（次回以降マークが濃くなります）'
-                  : '「分かった」として記録しました',
-              );
-            });
+            .then(
+              (res: {
+                ok?: boolean;
+                data?: {
+                  weakCounts?: Partial<Record<ConstructId, number>>;
+                  createdCardCount?: number;
+                };
+                error?: string;
+              }) => {
+                if (!res?.ok) {
+                  ui?.setFeedbackMessage(
+                    `記録に失敗しました: ${res?.error ?? '不明なエラー'}`,
+                  );
+                  return;
+                }
+
+                // 苦手構文カウントの変化を現在のページのスコアと相対順位・マーク濃さに即時反映する
+                if (res.data?.weakCounts) {
+                  for (const item of markedItems) {
+                    const updated = calculateDifficultyAndMarkLevel(
+                      item.dom.text,
+                      item.payload.constructs,
+                      res.data.weakCounts,
+                      {
+                        overrideLongSubject:
+                          item.payload.constructs.includes('long_subject'),
+                      },
+                    );
+                    item.payload.difficulty = updated.difficulty;
+                    item.payload.hardnessScore = updated.hardnessScore;
+                    item.payload.weakConstructsHit = updated.weakConstructsHit;
+                  }
+                  reapplyRelativeMarks(currentDensity);
+                }
+
+                ui?.setFeedbackMessage(
+                  result === 'unsure'
+                    ? `苦手構文として記録し、復習カードを追加しました（マーク濃度に反映済み）`
+                    : '「分かった」として記録しました',
+                );
+              },
+            );
         },
       });
     }
@@ -532,7 +1178,9 @@ function initKaidokuContent(): void {
           fromCache: boolean;
           provider: 'cloud' | 'rule';
           batchCallCount: number;
+          totalSentenceCount: number;
           markedCount: number;
+          markDensity: MarkDensity;
           notice?: string;
         };
         error?: string;
@@ -544,6 +1192,8 @@ function initKaidokuContent(): void {
       }
 
       const data = response.data;
+      totalPageSentences = data.totalSentenceCount ?? extracted.length;
+      currentDensity = data.markDensity ?? 'normal';
       markedItems = [];
       for (const payload of data.marks) {
         const dom = byId.get(payload.id);
@@ -552,16 +1202,13 @@ function initKaidokuContent(): void {
         }
       }
 
-      applyHighlights(markedItems);
-
-      const sourceLabel = data.fromCache
-        ? 'キャッシュ利用'
+      lastSourceLabel = data.fromCache
+        ? 'キャッシュ'
         : data.provider === 'cloud'
           ? `クラウド ${data.batchCallCount}回`
-          : 'ルール簡易判定';
-      ui.setStatus(
-        `難文 ${data.markedCount} 件マーク済み（${sourceLabel}・文をタップで図解）`,
-      );
+          : 'ルール簡易';
+
+      reapplyRelativeMarks(currentDensity);
     } catch (err) {
       ui.setStatus(
         `エラー: ${err instanceof Error ? err.message : String(err)}`,
@@ -583,18 +1230,22 @@ function initKaidokuContent(): void {
     const hit = findMarkedItemAtPoint(event.clientX, event.clientY, markedItems);
     if (!hit) return;
 
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    currentAnalyzeRequestId = requestId;
     activeItem = hit;
     activeAnalysis = null;
     setActiveHighlight(hit.dom.range);
-    ui.showPanelLoading(hit.dom.text);
+    ui.showPanelLoading(hit.dom.text, countWords(hit.dom.text) >= 25);
 
     void chrome.runtime
       .sendMessage({
         type: 'ANALYZE_SENTENCE',
         sentence: hit.dom.text,
+        requestId,
         preferredProvider: 'auto',
       })
       .then((res: { ok?: boolean; data?: AnalyzeResult; error?: string }) => {
+        if (currentAnalyzeRequestId !== requestId) return;
         if (!res?.ok || !res.data) {
           ui?.showPanelError(res?.error ?? '構文解析に失敗しました。');
           return;
@@ -603,15 +1254,40 @@ function initKaidokuContent(): void {
         ui?.showPanelResult(hit.dom.text, res.data);
       })
       .catch((err) => {
+        if (currentAnalyzeRequestId !== requestId) return;
         ui?.showPanelError(err instanceof Error ? err.message : String(err));
       });
   });
 
-  chrome.runtime?.onMessage.addListener((message: { type?: string }) => {
-    if (message?.type === 'KAIDOKU_RUN_MARK') {
-      void runMarking(false);
-    }
-  });
+  chrome.runtime?.onMessage.addListener(
+    (message: {
+      type?: string;
+      requestId?: string;
+      sentence?: string;
+      clauses?: ClauseSkeletonItem[];
+      stage1Ms?: number;
+      waitMs?: number;
+    }) => {
+      if (message?.type === 'KAIDOKU_RUN_MARK') {
+        void runMarking(false);
+        return;
+      }
+      if (
+        message?.type === 'KAIDOKU_ANALYSIS_STAGE1' &&
+        message.requestId &&
+        message.requestId === currentAnalyzeRequestId &&
+        message.sentence &&
+        Array.isArray(message.clauses)
+      ) {
+        ui?.showPanelStage1(
+          message.sentence,
+          message.clauses,
+          message.stage1Ms ?? 0,
+          message.waitMs ?? 0,
+        );
+      }
+    },
+  );
 }
 
 initKaidokuContent();

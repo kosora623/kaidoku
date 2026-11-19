@@ -1,4 +1,7 @@
-import { findMainVerbSpans } from '../ai/schema';
+import {
+  findMainVerbSpans,
+  normalizeSingleWordSocBrackets,
+} from '../ai/schema';
 import { getConstructLabelJa } from '../lang/en/constructs';
 import { formatNotationText } from '../notation';
 import type {
@@ -15,6 +18,8 @@ export interface EvalSentenceItem {
   id: string;
   category: string;
   text: string;
+  /** 出典 URL（実論文から抽出した長文データセット等で使用） */
+  sourceUrl?: string;
   expected: Analysis;
 }
 
@@ -76,11 +81,14 @@ export interface EvalTimingSummary {
   subsequentMaxMs: number | null;
 }
 
+/** 評価対象データセット名 */
+export type EvalDatasetName = 'test' | 'dev' | 'long' | 'long-dev';
+
 /** 1 プロバイダ（Nano / Cloud）の評価レポート全体 */
 export interface EvalProviderReport {
   provider: AiProvider;
   modelName: string;
-  datasetName: 'test' | 'dev';
+  datasetName: EvalDatasetName;
   executedAt: string;
   totalCount: number;
   validCount: number;
@@ -200,8 +208,14 @@ export function scoreItem(
     };
   }
 
-  const expSpans = filterScoringSpans(expected.spans);
-  const predSpans = filterScoringSpans(predicted.spans);
+  const rawExpSpans = filterScoringSpans(expected.spans);
+  const rawPredSpans = filterScoringSpans(predicted.spans);
+  const expSpans = sentence
+    ? normalizeSingleWordSocBrackets(sentence, rawExpSpans)
+    : rawExpSpans;
+  const predSpans = sentence
+    ? normalizeSingleWordSocBrackets(sentence, rawPredSpans)
+    : rawPredSpans;
 
   const expS = new Set(
     expSpans
@@ -272,7 +286,7 @@ export function aggregateEvalReport(
   meta: {
     provider: AiProvider;
     modelName: string;
-    datasetName: 'test' | 'dev';
+    datasetName: EvalDatasetName;
     executedAt?: string;
   },
   items: EvalItemResult[],

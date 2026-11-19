@@ -5,6 +5,7 @@ import {
 import { probePromptApi, resetNanoBaseSession } from './ai/nano';
 import { analyzeSentence, getAiEnvironmentStatus } from './ai/router';
 import { AnalysisValidationError } from './ai/schema';
+import { lookupWordMeaning } from './ai/word-meaning';
 import {
   clearAllPageMarkCaches,
   deletePageMarkCache,
@@ -12,19 +13,22 @@ import {
   getWeakConstructCounts,
   recordConstructFeedback,
   savePageMarkCache,
+  saveWordEntry,
 } from './db';
 import {
+  applyRelativePageMarks,
   calculateDifficultyAndMarkLevel,
   computeRuleFallbackMark,
   selectAndBatchCandidates,
 } from './lang/en/difficulty';
 import { hashCandidateList } from './lang/en/sentence-splitter';
-import { loadSettings } from './settings';
+import { loadSettings, saveMarkDensity } from './settings';
 import type {
   AiProviderPreference,
   Analysis,
   CachedSentenceMark,
   ConstructId,
+  MarkDensity,
   MarkedSentencePayload,
   NanoPromptMode,
 } from './types';
@@ -37,13 +41,17 @@ export interface PageSentenceInput {
 }
 
 export interface MarkPageResponseData {
+  /** 全判定済み候補（markLevel 0 の文も含め、密度切替時に API 再呼び出しなしで再計算する） */
   marks: MarkedSentencePayload[];
   fromCache: boolean;
   provider: 'cloud' | 'rule';
   modelName: string;
   batchCallCount: number;
+  /** ページ全体から抽出された総文数（全 N 文中 M 文の N） */
+  totalSentenceCount: number;
   candidateCount: number;
   markedCount: number;
+  markDensity: MarkDensity;
   notice?: string;
 }
 
@@ -54,9 +62,11 @@ export type BackgroundRequest =
   | { type: 'RESET_NANO_SESSION' }
   | { type: 'CLEAR_PAGE_CACHE'; url?: string }
   | { type: 'RUN_MARK_ON_TAB'; tabId: number }
+  | { type: 'SET_MARK_DENSITY'; density: MarkDensity }
   | {
       type: 'ANALYZE_SENTENCE';
       sentence: string;
+      requestId?: string;
       preferredProvider?: AiProviderPreference;
       nanoPromptMode?: NanoPromptMode;
       allowNanoDownload?: boolean;
@@ -76,6 +86,23 @@ export type BackgroundRequest =
       constructs: ConstructId[];
       result: 'understood' | 'unsure';
       analysis?: Analysis;
+    }
+  | {
+      type: 'LOOKUP_WORD_MEANING';
+      word: string;
+      sentence: string;
+    }
+  | {
+      type: 'SAVE_WORD_ENTRY';
+      word: string;
+      meaning: string;
+      text: string;
+      pageUrl: string;
+      pageTitle: string;
+      analysis?: Analysis;
+    }
+  | {
+      type: 'OPEN_REVIEW_PAGE';
     };
 
 /** 指定タブへ content.js を動的注入し、難文マーク処理を起動する */
@@ -132,6 +159,8 @@ async function handleMarkPageSentences(
   const batches = selectAndBatchCandidates(req.sentences);
   const selectedCandidates = batches.flat();
   const contentHash = hashCandidateList(selectedCandidates.map((c) => c.text));
+  const totalSentenceCount = req.sentences.length;
+  const markDensity = settings.markDensity;
 
   if (selectedCandidates.length === 0) {
     return {
@@ -140,11 +169,39 @@ async function handleMarkPageSentences(
       provider: settings.geminiApiKey ? 'cloud' : 'rule',
       modelName: settings.geminiApiKey ? DEFAULT_CLOUD_MODEL : 'rule-only',
       batchCallCount: 0,
+      totalSentenceCount,
       candidateCount: 0,
       markedCount: 0,
+      markDensity,
       notice: '8 語以上の英文候補が見つかりませんでした。',
     };
   }
+
+  /** ページ全体の相対順位から markLevel を確定するヘルパー */
+  const applyRanking = (
+    items: Array<MarkedSentencePayload & { viewportOrder: number }>,
+  ): { payloads: MarkedSentencePayload[]; markedCount: number } => {
+    const levelMap = applyRelativePageMarks(items, {
+      totalPageSentences: totalSentenceCount,
+      density: markDensity,
+    });
+    let markedCount = 0;
+    const payloads: MarkedSentencePayload[] = items.map((item) => {
+      const level = levelMap.get(item.id) ?? 0;
+      if (level > 0) markedCount += 1;
+      return {
+        id: item.id,
+        sentenceHash: item.sentenceHash,
+        text: item.text,
+        constructs: item.constructs,
+        difficulty: item.difficulty,
+        hardnessScore: item.hardnessScore,
+        markLevel: level,
+        weakConstructsHit: item.weakConstructsHit,
+      };
+    });
+    return { payloads, markedCount };
+  };
 
   // 1. URL キャッシュ照会（強制再判定でなければキャッシュを優先使用）
   if (req.forceRefresh) {
@@ -157,29 +214,31 @@ async function handleMarkPageSentences(
         byHash.set(m.sentenceHash, m);
       }
 
-      const payloads: MarkedSentencePayload[] = [];
+      const rawItems: Array<MarkedSentencePayload & { viewportOrder: number }> = [];
       for (const cand of selectedCandidates) {
         const hit = byHash.get(cand.sentenceHash);
         if (!hit) continue;
-        // 最新の苦手構文カウントを使ってマークの濃さを再計算する（API 再呼び出し不要）
+        // 最新の苦手構文カウントと現在のマーク密度でスコアと順位を再計算する（API 再呼び出し不要）
         const computed = calculateDifficultyAndMarkLevel(
           cand.text,
           hit.constructs,
           weakCounts,
           { overrideLongSubject: hit.constructs.includes('long_subject') },
         );
-        if (computed.markLevel > 0) {
-          payloads.push({
-            id: cand.id,
-            sentenceHash: cand.sentenceHash,
-            text: cand.text,
-            constructs: computed.constructs,
-            difficulty: computed.difficulty,
-            markLevel: computed.markLevel,
-            weakConstructsHit: computed.weakConstructsHit,
-          });
-        }
+        rawItems.push({
+          id: cand.id,
+          sentenceHash: cand.sentenceHash,
+          text: cand.text,
+          constructs: computed.constructs,
+          difficulty: computed.difficulty,
+          hardnessScore: computed.hardnessScore,
+          markLevel: 0,
+          weakConstructsHit: computed.weakConstructsHit,
+          viewportOrder: cand.viewportOrder,
+        });
       }
+
+      const { payloads, markedCount } = applyRanking(rawItems);
 
       return {
         marks: payloads,
@@ -187,8 +246,10 @@ async function handleMarkPageSentences(
         provider: cached.provider,
         modelName: cached.modelName,
         batchCallCount: 0,
+        totalSentenceCount,
         candidateCount: selectedCandidates.length,
-        markedCount: payloads.length,
+        markedCount,
+        markDensity,
         ...(cached.provider === 'rule'
           ? {
               notice:
@@ -202,7 +263,7 @@ async function handleMarkPageSentences(
   // 2. キャッシュなし：API キーがあれば最大 3 回のクラウドバッチ呼び出し、なければルールベース暫定判定
   const apiKey = settings.geminiApiKey;
   const cachedMarks: CachedSentenceMark[] = [];
-  const payloads: MarkedSentencePayload[] = [];
+  const rawItems: Array<MarkedSentencePayload & { viewportOrder: number }> = [];
   let provider: 'cloud' | 'rule' = 'rule';
   let modelName = 'rule-only';
   let batchCallCount = 0;
@@ -238,17 +299,17 @@ async function handleMarkPageSentences(
           difficulty: computed.difficulty,
         });
 
-        if (computed.markLevel > 0) {
-          payloads.push({
-            id: cand.id,
-            sentenceHash: cand.sentenceHash,
-            text: cand.text,
-            constructs: computed.constructs,
-            difficulty: computed.difficulty,
-            markLevel: computed.markLevel,
-            weakConstructsHit: computed.weakConstructsHit,
-          });
-        }
+        rawItems.push({
+          id: cand.id,
+          sentenceHash: cand.sentenceHash,
+          text: cand.text,
+          constructs: computed.constructs,
+          difficulty: computed.difficulty,
+          hardnessScore: computed.hardnessScore,
+          markLevel: 0,
+          weakConstructsHit: computed.weakConstructsHit,
+          viewportOrder: cand.viewportOrder,
+        });
       }
     }
   } else {
@@ -260,17 +321,17 @@ async function handleMarkPageSentences(
         constructs: fallback.constructs,
         difficulty: fallback.difficulty,
       });
-      if (fallback.markLevel > 0) {
-        payloads.push({
-          id: cand.id,
-          sentenceHash: cand.sentenceHash,
-          text: cand.text,
-          constructs: fallback.constructs,
-          difficulty: fallback.difficulty,
-          markLevel: fallback.markLevel,
-          weakConstructsHit: [],
-        });
-      }
+      rawItems.push({
+        id: cand.id,
+        sentenceHash: cand.sentenceHash,
+        text: cand.text,
+        constructs: fallback.constructs,
+        difficulty: fallback.difficulty,
+        hardnessScore: fallback.hardnessScore,
+        markLevel: 0,
+        weakConstructsHit: [],
+        viewportOrder: cand.viewportOrder,
+      });
     }
   }
 
@@ -285,14 +346,18 @@ async function handleMarkPageSentences(
     marks: cachedMarks,
   });
 
+  const { payloads, markedCount } = applyRanking(rawItems);
+
   return {
     marks: payloads,
     fromCache: false,
     provider,
     modelName,
     batchCallCount,
+    totalSentenceCount,
     candidateCount: selectedCandidates.length,
-    markedCount: payloads.length,
+    markedCount,
+    markDensity,
     ...(provider === 'rule'
       ? {
           notice:
@@ -304,7 +369,7 @@ async function handleMarkPageSentences(
 
 /** 拡張内ページ・Content Script からのメッセージを取り次ぐ */
 chrome.runtime?.onMessage.addListener(
-  (message: BackgroundRequest, _sender, sendResponse) => {
+  (message: BackgroundRequest, sender, sendResponse) => {
     if (!message || typeof message !== 'object' || !('type' in message)) {
       return false;
     }
@@ -393,8 +458,82 @@ chrome.runtime?.onMessage.addListener(
         result: message.result,
         analysis: message.analysis,
       })
-        .then(() => getWeakConstructCounts())
-        .then((weakCounts) => sendResponse({ ok: true, data: { weakCounts } }))
+        .then(async (saved) => {
+          const weakCounts = await getWeakConstructCounts();
+          sendResponse({
+            ok: true,
+            data: {
+              weakCounts,
+              createdCardCount: saved.createdCardCount,
+              updatedCardCount: saved.updatedCardCount,
+            },
+          });
+        })
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      return true;
+    }
+
+    if (message.type === 'LOOKUP_WORD_MEANING') {
+      void lookupWordMeaning(message.word, message.sentence)
+        .then((data) => sendResponse({ ok: true, data }))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      return true;
+    }
+
+    if (message.type === 'SAVE_WORD_ENTRY') {
+      void saveWordEntry({
+        word: message.word,
+        meaning: message.meaning,
+        text: message.text,
+        pageUrl: message.pageUrl,
+        pageTitle: message.pageTitle,
+        analysis: message.analysis,
+      })
+        .then((saved) =>
+          sendResponse({
+            ok: true,
+            data: {
+              wordId: saved.wordEntry.id,
+              cardId: saved.reviewCard.id,
+              created: saved.created,
+            },
+          }),
+        )
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      return true;
+    }
+
+    if (message.type === 'OPEN_REVIEW_PAGE') {
+      void chrome.tabs
+        .create({ url: chrome.runtime.getURL('review.html') })
+        .then(() => sendResponse({ ok: true }))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      return true;
+    }
+
+    if (message.type === 'SET_MARK_DENSITY') {
+      void saveMarkDensity(message.density)
+        .then(() => sendResponse({ ok: true }))
         .catch((err) =>
           sendResponse({
             ok: false,
@@ -405,10 +544,28 @@ chrome.runtime?.onMessage.addListener(
     }
 
     if (message.type === 'ANALYZE_SENTENCE') {
+      const tabId = sender?.tab?.id;
       void analyzeSentence(message.sentence, {
         preferredProvider: message.preferredProvider,
         nanoPromptMode: message.nanoPromptMode,
         allowNanoDownload: message.allowNanoDownload,
+        onStage1Complete:
+          typeof tabId === 'number'
+            ? (progress) => {
+                void chrome.tabs
+                  .sendMessage(tabId, {
+                    type: 'KAIDOKU_ANALYSIS_STAGE1',
+                    requestId: message.requestId,
+                    sentence: message.sentence,
+                    clauses: progress.clauses,
+                    stage1Ms: progress.stage1Ms,
+                    waitMs: progress.waitMs,
+                  })
+                  .catch(() => {
+                    // タブが閉じられた場合等は無視
+                  });
+              }
+            : undefined,
       })
         .then((result) => sendResponse({ ok: true, data: result }))
         .catch((err) => {

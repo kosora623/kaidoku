@@ -1,5 +1,4 @@
 import type {
-  Analysis,
   AnalyzeResult,
   MainVerbWordSpan,
   NanoPromptMode,
@@ -26,8 +25,9 @@ import {
   WORD_ANALYSIS_JSON_SCHEMA,
 } from './schema';
 import {
-  convertWordAnalysisToCharAnalysis,
+  convertWordAnalysisToCharAnalysisWithRepairs,
   tokenizeWords,
+  type ConvertedWordAnalysisResult,
   type WordToken,
 } from './tokenizer';
 
@@ -247,12 +247,12 @@ function parseMainVerbOutput(
   return result;
 }
 
-/** 生テキストを JSON パースし、単語番号→文字位置変換＋文法整合チェックを実行する */
+/** 生テキストを JSON パースし、単語番号→文字位置変換・自動修復＋文法整合チェックを実行する */
 function parseAndValidateWordOutput(
   sentence: string,
   rawText: string,
   tokens: WordToken[],
-): Analysis {
+): ConvertedWordAnalysisResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);
@@ -267,7 +267,7 @@ function parseAndValidateWordOutput(
   }
 
   try {
-    return convertWordAnalysisToCharAnalysis(sentence, parsed, tokens);
+    return convertWordAnalysisToCharAnalysisWithRepairs(sentence, parsed, tokens);
   } catch (err) {
     if (err instanceof AnalysisValidationError) {
       err.rawText = rawText;
@@ -372,15 +372,15 @@ export async function analyzeWithNano(
     const userPrompt = buildAnalysisUserPrompt(trimmed, tokens, stage1MainVerbs);
     rawText = await stage2Slot.clonedSession.prompt(userPrompt, promptOpts);
 
-    let analysis: Analysis;
+    let converted: ConvertedWordAnalysisResult;
     try {
-      analysis = parseAndValidateWordOutput(trimmed, rawText, tokens);
+      converted = parseAndValidateWordOutput(trimmed, rawText, tokens);
     } catch (firstErr) {
       if (!(firstErr instanceof AnalysisValidationError)) {
         throw firstErr;
       }
 
-      // 検証エラー時は失敗理由を添えて同じ複製セッションで 1 回だけ再試行する
+      // 自動修復で直らない検証エラー時は失敗理由を添えて同じ複製セッションで 1 回だけ再試行する
       firstAttemptError = {
         code: firstErr.code,
         message: firstErr.message,
@@ -392,7 +392,7 @@ export async function analyzeWithNano(
       rawText = await stage2Slot.clonedSession.prompt(retryPrompt, promptOpts);
 
       try {
-        analysis = parseAndValidateWordOutput(trimmed, rawText, tokens);
+        converted = parseAndValidateWordOutput(trimmed, rawText, tokens);
       } catch (secondErr) {
         if (secondErr instanceof AnalysisValidationError) {
           const analyzeMs =
@@ -415,7 +415,7 @@ export async function analyzeWithNano(
     const totalMs = totalSessionCreateMs + analyzeMs;
 
     return {
-      analysis,
+      analysis: converted.analysis,
       provider: 'nano',
       rawText,
       elapsedMs: totalMs,
@@ -426,6 +426,7 @@ export async function analyzeWithNano(
       },
       sessionCreated: anySessionCreated,
       attempts,
+      ...(converted.repaired.length > 0 ? { repaired: converted.repaired } : {}),
       ...(firstAttemptError ? { firstAttemptError } : {}),
       nanoPromptMode: mode,
       ...(stage1MainVerbs ? { stage1MainVerbs } : {}),

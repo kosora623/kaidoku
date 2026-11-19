@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyRelativePageMarks,
   calculateDifficultyAndMarkLevel,
+  CONSTRUCT_WEIGHTS,
   countWords,
   detectLongSubjectFromSentence,
   selectAndBatchCandidates,
@@ -50,43 +52,83 @@ describe('lang/en/difficulty.ts', () => {
     ).toBe(false);
   });
 
-  it('calculateDifficultyAndMarkLevel が SPEC.md の計算式どおりに difficulty と markLevel を算出する', () => {
-    // 単純文（構文 0・短文）→ マークなし
+  it('誤読しやすい構文の重みが高く、文の長さと relative_clause の重みが低く抑えられている', () => {
+    // 単純文（構文 0・短文）→ スコア 0・マークなし
     const simple = calculateDifficultyAndMarkLevel(
       'The experiment confirms our initial hypothesis.',
       [],
       {},
     );
+    expect(simple.hardnessScore).toBe(0);
     expect(simple.difficulty).toBe(1);
     expect(simple.markLevel).toBe(0);
 
-    // 短め難文（構文 1・8 語：eval-07）→ level 1（落とさない）
-    const shortHard = calculateDifficultyAndMarkLevel(
+    // 短めでも誤読しやすい構文（omitted_relative: 3.0）
+    const shortOmitted = calculateDifficultyAndMarkLevel(
       'The features we extracted capture subtle temporal dependencies.',
       ['omitted_relative'],
       {},
     );
-    expect(shortHard.difficulty).toBe(2);
-    expect(shortHard.markLevel).toBe(1);
+    // 長めだが頻出の relative_clause（0.8）だけの 35 語文（長さ加点 +0.75 → 計 1.55）
+    const longRelativeOnly = calculateDifficultyAndMarkLevel(
+      'This long descriptive sentence that appears in an academic introduction simply lists many straightforward technical words one after another without introducing any complex nested clauses or omitted pronouns across its entire thirty five word length.',
+      ['relative_clause'],
+      {},
+      { overrideLongSubject: false },
+    );
 
-    // 苦手構文ブースト（unsure 記録あり）→ level 1 が level 2 になる
-    const boosted1 = calculateDifficultyAndMarkLevel(
+    expect(CONSTRUCT_WEIGHTS.omitted_relative).toBeGreaterThan(
+      CONSTRUCT_WEIGHTS.relative_clause,
+    );
+    expect(shortOmitted.hardnessScore).toBeGreaterThan(
+      longRelativeOnly.hardnessScore,
+    );
+
+    // 苦手構文ブースト（unsure 記録あり）でスコアと markLevel が上がる
+    const boosted = calculateDifficultyAndMarkLevel(
       'The features we extracted capture subtle temporal dependencies.',
       ['omitted_relative'],
       { omitted_relative: 2 },
     );
-    expect(boosted1.markLevel).toBe(2);
-    expect(boosted1.weakConstructsHit).toEqual(['omitted_relative']);
+    expect(boosted.hardnessScore).toBeGreaterThan(shortOmitted.hardnessScore);
+    expect(boosted.weakConstructsHit).toEqual(['omitted_relative']);
+    expect(boosted.markLevel).toBe(3);
+  });
 
-    // 複数構文（baseLevel 2）＋ 苦手構文あり → level 3（濃い強調）
-    const boostedMax = calculateDifficultyAndMarkLevel(
-      'The system evaluated on noisy speech benchmarks outperforms conventional pipelines.',
-      ['participle_modifier'],
-      { participle_modifier: 1 },
-      { overrideLongSubject: true },
-    );
-    expect(boostedMax.constructs).toContain('long_subject');
-    expect(boostedMax.markLevel).toBe(3);
+  it('applyRelativePageMarks が上位 10% / 20% / 40% のみをマークし、濃さもマーク内順位で決める', () => {
+    // 全 100 文（スコア 1..100）
+    const items = Array.from({ length: 100 }, (_, i) => ({
+      id: `s-${i}`,
+      hardnessScore: i + 1,
+      weakConstructsHit: [] as [],
+      viewportOrder: i,
+    }));
+
+    const lowMap = applyRelativePageMarks(items, {
+      totalPageSentences: 100,
+      density: 'low',
+    });
+    const normalMap = applyRelativePageMarks(items, {
+      totalPageSentences: 100,
+      density: 'normal',
+    });
+    const highMap = applyRelativePageMarks(items, {
+      totalPageSentences: 100,
+      density: 'high',
+    });
+
+    const countMarked = (m: Map<string, number>) =>
+      Array.from(m.values()).filter((v) => v > 0).length;
+
+    expect(countMarked(lowMap)).toBe(10);
+    expect(countMarked(normalMap)).toBe(20);
+    expect(countMarked(highMap)).toBe(40);
+
+    // normal（上位 20 文 = s-80..s-99）の中で、最高スコア s-99 は濃さ 3、中位は 2、下位は 1、s-79 は 0
+    expect(normalMap.get('s-99')).toBe(3);
+    expect(normalMap.get('s-90')).toBe(2);
+    expect(normalMap.get('s-80')).toBe(1);
+    expect(normalMap.get('s-79')).toBe(0);
   });
 
   it('selectAndBatchCandidates が 8 語以上を原則すべて候補にし、80 文 / 12,000 文字・最大 3 バッチで読む順に分割する', () => {

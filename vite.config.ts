@@ -13,6 +13,7 @@ export default defineConfig({
         eval: resolve(__dirname, 'eval.html'),
         options: resolve(__dirname, 'options.html'),
         consent: resolve(__dirname, 'consent.html'),
+        review: resolve(__dirname, 'review.html'),
         background: resolve(__dirname, 'src/background.ts'),
       },
       output: {

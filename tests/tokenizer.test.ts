@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AnalysisValidationError } from '../src/ai/schema';
 import {
   convertWordAnalysisToCharAnalysis,
+  convertWordAnalysisToCharAnalysisWithRepairs,
   tokenizeWords,
 } from '../src/ai/tokenizer';
 
@@ -225,5 +226,104 @@ describe('convertWordAnalysisToCharAnalysis', () => {
         'SPAN_CROSSING_OVERLAP',
       );
     }
+  });
+
+  it('スパン末尾が (Section 6)・(86 Hz)・カンマ入り引用で終わる場合に閉じ括弧 ")" まで含める', () => {
+    const sentence =
+      'We evaluate the model through post-training (Section 6) at 50 Hz rather than DAC (86 Hz) on LAMBADA (Paperno et al., 2016; Maynez et al., 2020).';
+    const tokens = tokenizeWords(sentence);
+    const idx = (word: string) => tokens.findIndex((t) => t.text === word);
+    const secondHz = tokens.map((t) => t.text).lastIndexOf('Hz');
+
+    const analysis = convertWordAnalysisToCharAnalysis(sentence, {
+      mainVerbs: [{ startWord: idx('evaluate'), endWord: idx('evaluate') }],
+      spans: [
+        { startWord: idx('We'), endWord: idx('We'), role: 'S', bracket: 'noun' },
+        { startWord: idx('the'), endWord: idx('model'), role: 'O', bracket: 'noun' },
+        { startWord: idx('through'), endWord: idx('6'), role: 'modifier', bracket: 'adv' },
+        { startWord: idx('rather'), endWord: secondHz, role: 'modifier', bracket: 'adv' },
+        { startWord: idx('on'), endWord: idx('2020'), role: 'modifier', bracket: 'adv' },
+      ],
+      constructs: ['comparative'],
+      difficulty: 3,
+    });
+
+    // 1語主語 "We" からは [ ] が外れる
+    expect(analysis.spans[0]).toEqual({ start: 0, end: 2, role: 'S' });
+    // "(Section 6)" の閉じ括弧まで含まれる
+    expect(sentence.slice(analysis.spans[2].start, analysis.spans[2].end)).toBe(
+      'through post-training (Section 6)',
+    );
+    // "(86 Hz)" の閉じ括弧まで含まれる
+    expect(sentence.slice(analysis.spans[3].start, analysis.spans[3].end)).toBe(
+      'rather than DAC (86 Hz)',
+    );
+    // カンマ・セミコロン入り引用 "(Paperno et al., 2016; Maynez et al., 2020)" の閉じ括弧まで含まれる
+    expect(sentence.slice(analysis.spans[4].start, analysis.spans[4].end)).toBe(
+      'on LAMBADA (Paperno et al., 2016; Maynez et al., 2020)',
+    );
+  });
+
+  it('括弧が入れ子になる場合（Whisper (large-v2 (Radford et al., 2023))）でも対応する閉じ括弧をすべて含め、括弧内始まりのスパンは外側の ")" を奪わない', () => {
+    const sentence =
+      'We compare our system with Whisper (large-v2 (Radford et al., 2023)).';
+    const tokens = tokenizeWords(sentence);
+    const idx = (word: string) => tokens.findIndex((t) => t.text === word);
+
+    const analysis = convertWordAnalysisToCharAnalysis(sentence, {
+      mainVerbs: [{ startWord: idx('compare'), endWord: idx('compare') }],
+      spans: [
+        { startWord: idx('We'), endWord: idx('We'), role: 'S' },
+        { startWord: idx('our'), endWord: idx('system'), role: 'O', bracket: 'noun' },
+        { startWord: idx('with'), endWord: idx('2023'), role: 'modifier', bracket: 'adv' },
+        // 括弧の内側から始まるスパン（"(" を含まないため ")" を取り込んではいけない）
+        {
+          startWord: idx('Radford'),
+          endWord: idx('2023'),
+          role: 'modifier',
+          bracket: 'noun',
+          modifies: 2,
+        },
+      ],
+      constructs: [],
+      difficulty: 3,
+    });
+
+    expect(sentence.slice(analysis.spans[2].start, analysis.spans[2].end)).toBe(
+      'with Whisper (large-v2 (Radford et al., 2023))',
+    );
+    expect(sentence.slice(analysis.spans[3].start, analysis.spans[3].end)).toBe(
+      'Radford et al., 2023',
+    );
+  });
+
+  it('軽い検証エラー（不正な modifies・modifier の bracket 欠落）を自動修復し、修復ログを返す', () => {
+    const sentence =
+      'The vector of derivatives works well in practice.';
+    const tokens = tokenizeWords(sentence);
+    const idx = (word: string) => tokens.findIndex((t) => t.text === word);
+
+    const { analysis, repaired } = convertWordAnalysisToCharAnalysisWithRepairs(
+      sentence,
+      {
+        mainVerbs: [{ startWord: idx('works'), endWord: idx('works') }],
+        spans: [
+          { startWord: idx('The'), endWord: idx('derivatives'), role: 'S', bracket: 'noun' },
+          // S の内側で bracket 欠落 → adj 補完、さらに自己参照 modifies: 1 → 除去
+          { startWord: idx('of'), endWord: idx('derivatives'), role: 'modifier', modifies: 1 },
+          // S/O/C 外で bracket 欠落 → adv 補完、さらに単語番号らしき範囲外 modifies: 31 → 除去
+          { startWord: idx('well'), endWord: idx('well'), role: 'modifier', modifies: 31 },
+          { startWord: idx('in'), endWord: idx('practice'), role: 'modifier', bracket: 'adv' },
+        ],
+        constructs: [],
+        difficulty: 2,
+      },
+    );
+
+    expect(repaired).toHaveLength(4);
+    expect(analysis.spans[1].bracket).toBe('adj');
+    expect(analysis.spans[1].modifies).toBeUndefined();
+    expect(analysis.spans[2].bracket).toBe('adv');
+    expect(analysis.spans[2].modifies).toBeUndefined();
   });
 });

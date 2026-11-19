@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>χ読 — 復習</title>
+    <link rel="stylesheet" href="/src/review.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="brand">
+          <h1><span class="logo-chi">χ</span>読 <span class="badge-page">復習</span></h1>
+          <p class="tagline">記録した単語とつまずいた構文を、元の英文のカードで間隔反復します。</p>
+        </div>
+        <div class="header-links">
+          <a href="options.html" class="link-btn">設定</a>
+          <a href="debug.html" class="link-btn">デバッグ画面</a>
+        </div>
+      </header>
+
+      <section class="summary-grid" aria-label="学習サマリー">
+        <div class="stat-card">
+          <span class="stat-label">今日の復習待ち</span>
+          <span id="stat-due-total" class="stat-value accent">0</span>
+          <span id="stat-due-breakdown" class="stat-sub">単語 0 / 構文 0</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">記録済みカード</span>
+          <span id="stat-total-cards" class="stat-value">0</span>
+          <span id="stat-total-breakdown" class="stat-sub">単語 0 / 構文 0</span>
+        </div>
+        <div class="stat-card stat-card-wide">
+          <span class="stat-label">苦手な構文（まだ怪しい記録）</span>
+          <div id="weak-constructs-list" class="weak-pills">
+            <span class="muted">まだ記録がありません</span>
+          </div>
+        </div>
+      </section>
+
+      <nav class="tabs" role="tablist">
+        <button
+          type="button"
+          id="tab-study"
+          class="tab-btn is-active"
+          role="tab"
+          aria-selected="true"
+        >
+          復習する
+        </button>
+        <button
+          type="button"
+          id="tab-library"
+          class="tab-btn"
+          role="tab"
+          aria-selected="false"
+        >
+          記録一覧（単語・構文）
+        </button>
+      </nav>
+
+      <!-- 復習セッション -->
+      <section id="view-study" class="view-section">
+        <div class="toolbar">
+          <div class="filter-group" role="group" aria-label="カード種別フィルタ">
+            <button type="button" class="filter-btn is-active" data-study-filter="all">すべて</button>
+            <button type="button" class="filter-btn" data-study-filter="word">単語のみ</button>
+            <button type="button" class="filter-btn" data-study-filter="construct">構文のみ</button>
+          </div>
+          <label class="toggle-label">
+            <input type="checkbox" id="include-upcoming" />
+            期限前のカードも練習する
+          </label>
+          <span id="session-progress" class="progress-text"></span>
+        </div>
+
+        <div id="study-stage" class="study-stage"></div>
+      </section>
+
+      <!-- 記録一覧 -->
+      <section id="view-library" class="view-section hidden">
+        <div class="toolbar">
+          <div class="filter-group" role="group" aria-label="一覧フィルタ">
+            <button type="button" class="filter-btn is-active" data-lib-filter="all">すべて</button>
+            <button type="button" class="filter-btn" data-lib-filter="word">単語</button>
+            <button type="button" class="filter-btn" data-lib-filter="construct">構文</button>
+          </div>
+          <input
+            type="search"
+            id="library-search"
+            class="search-input"
+            placeholder="単語・意味・構文・元文・記事タイトルで検索..."
+          />
+        </div>
+        <div id="library-list" class="library-list"></div>
+      </section>
+    </div>
+
+    <script type="module" src="/src/review-page.ts"></script>
+  </body>
+</html>

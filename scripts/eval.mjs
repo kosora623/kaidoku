@@ -25,6 +25,8 @@ const RESULTS_DIR = path.join(ROOT_DIR, 'tests', 'eval', 'results');
 function parseArgs(argv) {
   let dataset = 'test';
   let mode = 'single';
+  let cloudMode = 'auto';
+  let compareStages = false;
   let nanoPath = null;
   let skipCloud = false;
   let reuseCloud = false;
@@ -33,9 +35,23 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--dataset' && argv[i + 1]) {
-      dataset = argv[++i] === 'dev' ? 'dev' : 'test';
+      const val = argv[++i];
+      if (val === 'dev' || val === 'long' || val === 'long-dev') {
+        dataset = val;
+      } else {
+        dataset = 'test';
+      }
     } else if (arg === '--mode' && argv[i + 1]) {
       mode = argv[++i] === 'batch' ? 'batch' : 'single';
+    } else if (arg === '--cloud-mode' && argv[i + 1]) {
+      const val = argv[++i];
+      if (val === 'two-stage' || val === 'auto') {
+        cloudMode = val;
+      } else {
+        cloudMode = 'one-stage';
+      }
+    } else if (arg === '--compare-stages') {
+      compareStages = true;
     } else if (arg === '--nano' && argv[i + 1]) {
       nanoPath = path.resolve(argv[++i]);
     } else if (arg === '--skip-cloud') {
@@ -49,7 +65,16 @@ function parseArgs(argv) {
       }
     }
   }
-  return { dataset, mode, nanoPath, skipCloud, reuseCloud, cloudDelayMs };
+  return {
+    dataset,
+    mode,
+    cloudMode,
+    compareStages,
+    nanoPath,
+    skipCloud,
+    reuseCloud,
+    cloudDelayMs,
+  };
 }
 
 function sleep(ms) {
@@ -74,6 +99,7 @@ async function loadSharedModules() {
   const entryCode = `
     export { analyzeWithCloud, classifyBatchConstructsWithCloud, DEFAULT_CLOUD_MODEL } from './src/ai/cloud.ts';
     export { AnalysisValidationError } from './src/ai/schema.ts';
+    export { convertWordAnalysisToCharAnalysis, convertWordAnalysisToCharAnalysisWithRepairs } from './src/ai/tokenizer.ts';
     export { calculateDifficultyAndMarkLevel } from './src/lang/en/difficulty.ts';
     export { scoreItem, aggregateEvalReport, formatComparisonMarkdown, formatErrorAnalysisMarkdown } from './src/eval/metrics.ts';
   `;
@@ -99,7 +125,7 @@ async function loadSharedModules() {
   };
 }
 
-/** 保存済みの結果 JSON を読み込み、現在の正解ラベル（sentences.json）で最新スコアを再計算する */
+/** 保存済みの結果 JSON を読み込み、現在のトークナイザ・正規化・正解ラベルで最新スコアを再計算する */
 function loadAndRescoreReport(filePath, provider, fallbackModel, dataset, datasetName, shared) {
   if (!fs.existsSync(filePath)) {
     return null;
@@ -109,12 +135,67 @@ function loadAndRescoreReport(filePath, provider, fallbackModel, dataset, datase
   const byId = new Map(dataset.map((item) => [item.id, item]));
   const rescoredItems = (raw.items ?? []).map((item) => {
     const ref = byId.get(item.id);
-    return {
+    let analysis = item.analysis;
+    let attempts = item.attempts;
+    let firstAttemptError = item.firstAttemptError;
+    let repaired = item.repaired;
+
+    if (item.ok && ref) {
+      let resolvedFromFirstAttempt = false;
+      // 再試行が起きていた文について、初回 AI 生出力が自動修復で 1 回目通過できるかを再検証する
+      if (item.firstAttemptError?.rawText) {
+        try {
+          const parsedFirst = JSON.parse(item.firstAttemptError.rawText);
+          if (
+            parsedFirst &&
+            typeof parsedFirst === 'object' &&
+            Array.isArray(parsedFirst.mainVerbs)
+          ) {
+            const converted = shared.convertWordAnalysisToCharAnalysisWithRepairs(
+              ref.text,
+              parsedFirst,
+            );
+            analysis = converted.analysis;
+            attempts = 1;
+            firstAttemptError = undefined;
+            repaired = converted.repaired;
+            resolvedFromFirstAttempt = true;
+          }
+        } catch {
+          // 自動修復で直らないエラーは 2 回目出力の検証へ進む
+        }
+      }
+
+      if (!resolvedFromFirstAttempt && item.rawText) {
+        try {
+          const parsed = JSON.parse(item.rawText);
+          if (parsed && typeof parsed === 'object' && Array.isArray(parsed.mainVerbs)) {
+            const converted = shared.convertWordAnalysisToCharAnalysisWithRepairs(
+              ref.text,
+              parsed,
+            );
+            analysis = converted.analysis;
+            repaired = converted.repaired;
+          }
+        } catch {
+          // 再変換に失敗した場合は保存済みの analysis をそのまま使う
+        }
+      }
+    }
+
+    const nextItem = {
       ...item,
+      attempts,
+      analysis,
+      ...(repaired && repaired.length > 0 ? { repaired } : {}),
       scores: ref
-        ? shared.scoreItem(ref.expected, item.analysis, ref.text)
+        ? shared.scoreItem(ref.expected, analysis, ref.text)
         : item.scores,
     };
+    if (!firstAttemptError) {
+      delete nextItem.firstAttemptError;
+    }
+    return nextItem;
   });
 
   return shared.aggregateEvalReport(
@@ -134,10 +215,17 @@ async function runCloudEval(
   apiKey,
   shared,
   cloudDelayMs,
+  cloudPromptMode = 'auto',
 ) {
   const items = [];
+  const modeSuffix =
+    cloudPromptMode === 'one-stage'
+      ? ''
+      : cloudPromptMode === 'two-stage'
+        ? ' / 2段階'
+        : ' / auto(25語+2段階)';
   console.log(
-    `[Cloud] ${shared.DEFAULT_CLOUD_MODEL} で ${dataset.length} 文の評価を開始します（RPM 制御間隔: ${cloudDelayMs}ms）...`,
+    `[Cloud] ${shared.DEFAULT_CLOUD_MODEL}${modeSuffix} で ${dataset.length} 文の評価を開始します（RPM 制御間隔: ${cloudDelayMs}ms）...`,
   );
 
   for (let i = 0; i < dataset.length; i++) {
@@ -152,7 +240,9 @@ async function runCloudEval(
     while (!done) {
       const startedAt = performance.now();
       try {
-        const res = await shared.analyzeWithCloud(entry.text, apiKey);
+        const res = await shared.analyzeWithCloud(entry.text, apiKey, {
+          cloudPromptMode,
+        });
         const scores = shared.scoreItem(entry.expected, res.analysis, entry.text);
         items.push({
           id: entry.id,
@@ -179,12 +269,17 @@ async function runCloudEval(
         const rawMsg = err instanceof Error ? err.message : String(err);
         const safeMsg = apiKey ? rawMsg.replaceAll(apiKey, '***') : rawMsg;
 
-        // 無料枠の HTTP 429 レート制限時は指定秒数待機して再試行する（最大2回）
-        if (!isVal && safeMsg.includes('429') && rateLimitRetries < 2) {
+        // 無料枠の HTTP 429 レート制限・一時的な 503 過負荷時は待機して再試行する（最大2回）
+        if (
+          !isVal &&
+          (safeMsg.includes('429') || safeMsg.includes('503')) &&
+          rateLimitRetries < 2
+        ) {
           rateLimitRetries += 1;
-          const waitMs = extractRateLimitWaitMs(safeMsg);
+          const is503 = safeMsg.includes('503') && !safeMsg.includes('429');
+          const waitMs = is503 ? 10000 : extractRateLimitWaitMs(safeMsg);
           console.log(
-            `  [${i + 1}/${dataset.length}] ${entry.id}: レート制限 (429) のため ${Math.round(waitMs / 1000)} 秒待機して再試行します...`,
+            `  [${i + 1}/${dataset.length}] ${entry.id}: 一時エラー (${is503 ? '503' : '429'}) のため ${Math.round(waitMs / 1000)} 秒待機して再試行します...`,
           );
           await sleep(waitMs);
           continue;
@@ -222,7 +317,7 @@ async function runCloudEval(
   return shared.aggregateEvalReport(
     {
       provider: 'cloud',
-      modelName: shared.DEFAULT_CLOUD_MODEL,
+      modelName: `${shared.DEFAULT_CLOUD_MODEL}${modeSuffix}`,
       datasetName,
     },
     items,
@@ -394,13 +489,24 @@ async function runBatchEvalMode(dataset, datasetName, apiKey, shared) {
 }
 
 async function main() {
-  const { dataset: datasetName, mode, nanoPath, skipCloud, reuseCloud, cloudDelayMs } =
-    parseArgs(process.argv.slice(2));
+  const {
+    dataset: datasetName,
+    mode,
+    cloudMode,
+    compareStages,
+    nanoPath,
+    skipCloud,
+    reuseCloud,
+    cloudDelayMs,
+  } = parseArgs(process.argv.slice(2));
 
-  const datasetFile =
-    datasetName === 'dev'
-      ? path.join(ROOT_DIR, 'tests', 'eval', 'dev-sentences.json')
-      : path.join(ROOT_DIR, 'tests', 'eval', 'sentences.json');
+  const datasetFileMap = {
+    test: path.join(ROOT_DIR, 'tests', 'eval', 'sentences.json'),
+    dev: path.join(ROOT_DIR, 'tests', 'eval', 'dev-sentences.json'),
+    long: path.join(ROOT_DIR, 'tests', 'eval', 'long-sentences.json'),
+    'long-dev': path.join(ROOT_DIR, 'tests', 'eval', 'long-dev-sentences.json'),
+  };
+  const datasetFile = datasetFileMap[datasetName] ?? datasetFileMap.test;
 
   const dataset = JSON.parse(fs.readFileSync(datasetFile, 'utf8'));
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
@@ -411,6 +517,71 @@ async function main() {
     if (mode === 'batch') {
       const apiKey = (process.env.GEMINI_API_KEY ?? '').trim();
       await runBatchEvalMode(dataset, datasetName, apiKey, shared);
+      return;
+    }
+
+    if (compareStages) {
+      const apiKey = (process.env.GEMINI_API_KEY ?? '').trim();
+      if (!apiKey) {
+        console.log(
+          '[Cloud] .env.local に GEMINI_API_KEY が未設定のため、1段階 vs 2段階 比較をスキップします。',
+        );
+        return;
+      }
+
+      const report1 = await runCloudEval(
+        dataset,
+        datasetName,
+        apiKey,
+        shared,
+        cloudDelayMs,
+        'one-stage',
+      );
+      await sleep(cloudDelayMs);
+      const report2 = await runCloudEval(
+        dataset,
+        datasetName,
+        apiKey,
+        shared,
+        cloudDelayMs,
+        'two-stage',
+      );
+
+      const reports = [report1, report2];
+      fs.writeFileSync(
+        path.join(RESULTS_DIR, `cloud-${datasetName}-1stage.json`),
+        JSON.stringify(report1, null, 2) + '\n',
+        'utf8',
+      );
+      fs.writeFileSync(
+        path.join(RESULTS_DIR, `cloud-${datasetName}-2stage.json`),
+        JSON.stringify(report2, null, 2) + '\n',
+        'utf8',
+      );
+
+      const table = shared.formatComparisonMarkdown(reports);
+      console.log(`\n=== 1段階 vs 2段階 比較表 (${datasetName}) ===\n`);
+      console.log(table);
+
+      const reportFile = path.join(RESULTS_DIR, `report-${datasetName}.md`);
+      fs.writeFileSync(
+        reportFile,
+        `# χ読 1段階 vs 2段階 評価レポート (${datasetName})\n\n${table}\n`,
+        'utf8',
+      );
+
+      const errorsFile = path.join(RESULTS_DIR, `errors-${datasetName}.md`);
+      fs.writeFileSync(
+        errorsFile,
+        shared.formatErrorAnalysisMarkdown(reports, dataset),
+        'utf8',
+      );
+      console.log(
+        `\nレポートを保存しました: ${path.relative(ROOT_DIR, reportFile)}`,
+      );
+      console.log(
+        `誤り分析レポートを保存しました: ${path.relative(ROOT_DIR, errorsFile)}`,
+      );
       return;
     }
 
@@ -425,7 +596,9 @@ async function main() {
             path.join(RESULTS_DIR, 'nano-dev-2stage-results.json'),
             path.join(RESULTS_DIR, 'nano-dev-results.json'),
           ]
-        : [path.join(RESULTS_DIR, 'nano-results.json')];
+        : datasetName === 'test'
+          ? [path.join(RESULTS_DIR, 'nano-results.json')]
+          : [];
 
     let loadedNanoCount = 0;
     for (const filePath of candidateNanoFiles) {
@@ -446,7 +619,7 @@ async function main() {
       }
     }
 
-    if (loadedNanoCount === 0) {
+    if (loadedNanoCount === 0 && candidateNanoFiles.length > 0) {
       console.log(
         `[Nano] 結果ファイルが未配置です（${path.relative(ROOT_DIR, candidateNanoFiles[0])}）。`,
       );
@@ -494,6 +667,7 @@ async function main() {
         apiKey,
         shared,
         cloudDelayMs,
+        cloudMode,
       );
       fs.writeFileSync(
         cloudOutFile,

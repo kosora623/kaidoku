@@ -81,8 +81,11 @@ export function detectLongSubject(
     if (words.length === 0) continue;
 
     const firstWord = (words[0] ?? '').toLowerCase();
+    // "that result" のような短い指示形容詞 that + 名詞（3語以下）は that 節の長い主語ではない
     if (LONG_SUBJECT_STARTERS.has(firstWord)) {
-      return true;
+      if (!(firstWord === 'that' && words.length <= 3)) {
+        return true;
+      }
     }
     // 動名詞（-ing で始まる主語。先頭語が英字2文字以上 + ing）
     if (/^[a-z]{2,}ing$/.test(firstWord)) {

@@ -196,14 +196,54 @@ function escapeHtml(text: string): string {
     .replaceAll("'", '&#39;');
 }
 
+export interface RenderNotationHtmlOptions {
+  /** true のとき、テキスト内の各英単語をクリック可能な <span class="kaidoku-word"> で包む */
+  clickableWords?: boolean;
+}
+
+/** テキストノード内の英単語をクリック可能スパンに変換する（[MATH] や記号は素通し） */
+function renderTextWithClickableWords(text: string): string {
+  const pattern = /\[MATH\]|[A-Za-z]+(?:['’-][A-Za-z]+)*/g;
+  let result = '';
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const token = match[0];
+    const start = match.index ?? 0;
+    if (start > lastIndex) {
+      result += escapeHtml(text.slice(lastIndex, start));
+    }
+    if (token === '[MATH]') {
+      result += escapeHtml(token);
+    } else {
+      const escaped = escapeHtml(token);
+      result += `<span class="kaidoku-word" data-word="${escaped}" role="button" tabindex="0">${escaped}</span>`;
+    }
+    lastIndex = start + token.length;
+  }
+
+  if (lastIndex < text.length) {
+    result += escapeHtml(text.slice(lastIndex));
+  }
+  return result;
+}
+
 /** ツリーノードを構造化 HTML へ変換する */
-function renderNodeHtml(node: NotationNode, spans: AnalysisSpan[], sentence: string): string {
+function renderNodeHtml(
+  node: NotationNode,
+  spans: AnalysisSpan[],
+  sentence: string,
+  clickableWords: boolean,
+): string {
   if (node.type === 'text') {
-    return `<span class="kaidoku-text">${escapeHtml(node.text)}</span>`;
+    const content = clickableWords
+      ? renderTextWithClickableWords(node.text)
+      : escapeHtml(node.text);
+    return `<span class="kaidoku-text">${content}</span>`;
   }
 
   const innerHtml = node.children
-    .map((child) => renderNodeHtml(child, spans, sentence))
+    .map((child) => renderNodeHtml(child, spans, sentence, clickableWords))
     .join('');
 
   const classes = ['kaidoku-span', `kaidoku-role-${node.span.role}`];
@@ -249,11 +289,13 @@ function renderNodeHtml(node: NotationNode, spans: AnalysisSpan[], sentence: str
 export function renderNotationHtml(
   sentence: string,
   analysis: Analysis,
+  options?: RenderNotationHtmlOptions,
 ): string {
   const validated = validateAnalysis(sentence, analysis);
   const tree = buildNotationTree(sentence, validated);
+  const clickableWords = Boolean(options?.clickableWords);
   const body = tree
-    .map((node) => renderNodeHtml(node, validated.spans, sentence))
+    .map((node) => renderNodeHtml(node, validated.spans, sentence, clickableWords))
     .join('');
 
   return `<div class="kaidoku-notation">${body}</div>`;

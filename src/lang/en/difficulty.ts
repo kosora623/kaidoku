@@ -1,5 +1,5 @@
 import { CONSTRUCT_IDS } from './constructs';
-import type { ConstructId, MarkLevel } from '../../types';
+import type { ConstructId, MarkDensity, MarkLevel } from '../../types';
 
 /** 候補抽出の最小単語数（8 語以上の文は原則すべて候補にする） */
 export const MIN_CANDIDATE_WORDS = 8;
@@ -12,6 +12,31 @@ export const MAX_CHARS_PER_BATCH = 12000;
 
 /** 1 ページあたりのクラウドバッチ呼び出し最大回数 */
 export const MAX_BATCHES_PER_PAGE = 3;
+
+/** ページ内マーク密度ごとの上位割合（少なめ 10% / ふつう 20% / 多め 40%） */
+export const MARK_DENSITY_RATIO: Record<MarkDensity, number> = {
+  low: 0.1,
+  normal: 0.2,
+  high: 0.4,
+};
+
+/**
+ * 構文ごとの誤読しやすさ重み。
+ * 誤読しやすい構文（関係詞省略・倒置・分詞後置修飾・同格・形式主語 it・分詞構文）を高くし、
+ * 論文で頻出する relative_clause は抑える。
+ */
+export const CONSTRUCT_WEIGHTS: Record<ConstructId, number> = {
+  omitted_relative: 3.0,
+  inversion: 3.0,
+  participle_modifier: 2.5,
+  apposition: 2.5,
+  formal_it: 2.5,
+  participial_construction: 2.5,
+  long_subject: 1.5,
+  comparative: 1.5,
+  coordination: 1.0,
+  relative_clause: 0.8,
+};
 
 const WORD_REGEX =
   /\[MATH\]|(?:[$€£¥](?=\d))?[\p{L}\p{N}]+(?:['’\-./][\p{L}\p{N}]+)*%?/gu;
@@ -74,6 +99,15 @@ export function detectLongSubjectFromSentence(sentence: string): boolean {
     // "To reduce cost, we ..." のような目的の不定詞（カンマ区切り）は除外
     if (first === 'to' && trimmed.includes(',')) {
       return false;
+    }
+    // "that result neither gives ..." のような指示形容詞 that + 名詞は除外（that 節なら動詞の前に複数語）
+    if (first === 'that') {
+      const firstVerbIdx = words.findIndex(
+        (w, idx) => idx >= 1 && FINITE_VERB_HINT_REGEX.test(w),
+      );
+      if (firstVerbIdx > 0 && firstVerbIdx <= 3) {
+        return false;
+      }
     }
     return true;
   }
@@ -173,17 +207,20 @@ export function computeHardRuleScore(sentence: string): number {
 export interface ComputedDifficultyResult {
   /** コード判定の long_subject を統合した最終 constructs */
   constructs: ConstructId[];
-  /** 1〜5 の難易度（SPEC.md の計算式に基づく） */
+  /** 1〜5 の難易度 */
   difficulty: number;
-  /** CSS Custom Highlight API 用のマーク濃さ（0: なし, 1: 薄, 2: 標準, 3: 濃） */
+  /** ページ内相対順位づけに使う難度スコア（誤読しやすい構文ほど高い） */
+  hardnessScore: number;
+  /** 単文評価時の仮マーク濃さ（ページ全体では applyRelativePageMarks で順位決定する） */
   markLevel: MarkLevel;
   /** ユーザーの苦手構文に該当した構文一覧 */
   weakConstructsHit: ConstructId[];
 }
 
 /**
- * SPEC.md の計算式に従い、constructs・文の長さ・long_subject（コード判定）・
- * ユーザーの苦手構文（ConstructEntry の unsure 件数）から difficulty と markLevel を確定計算する。
+ * constructs・文の長さ・long_subject（コード判定）・ユーザーの苦手構文から
+ * 難度スコア（hardnessScore）・difficulty（1〜5）・単文基準の markLevel を算出する。
+ * 誤読しやすい構文の重みを高くし、文の長さと relative_clause の重みは低く抑える。
  */
 export function calculateDifficultyAndMarkLevel(
   sentence: string,
@@ -209,42 +246,136 @@ export function calculateDifficultyAndMarkLevel(
   const constructs = Array.from(effectiveSet);
   const wordCount = countWords(sentence);
 
-  // lengthBonus: 30語以上 +2、20語以上 +1、20語未満 0
-  const lengthBonus = wordCount >= 30 ? 2 : wordCount >= 20 ? 1 : 0;
-
-  // difficulty (1..5) = clamp(1 + min(3, constructs.length) + lengthBonus, 1, 5)
-  const rawDifficulty = 1 + Math.min(3, constructs.length) + lengthBonus;
-  const difficulty = Math.max(1, Math.min(5, rawDifficulty));
-
-  // baseLevel (0..2)
-  let baseLevel: MarkLevel;
-  if (constructs.length === 0 && wordCount < 25) {
-    baseLevel = 0;
-  } else if (
-    (constructs.length === 1 && wordCount < 25) ||
-    (constructs.length === 0 && wordCount >= 25)
-  ) {
-    baseLevel = 1;
-  } else {
-    baseLevel = 2;
+  // 構文重みの合計
+  let constructScore = 0;
+  for (const cid of constructs) {
+    constructScore += CONSTRUCT_WEIGHTS[cid] ?? 1.0;
   }
 
-  // 苦手構文ブースト：unsure 記録が 1 件以上ある構文を含めば濃さを +1（最大 3）
+  // 文の長さの重みは低く抑える（20語未満 0、30語 +0.5、40語 +1.0、上限 +1.5）
+  const lengthScore =
+    wordCount <= 20 ? 0 : Math.min(1.5, (wordCount - 20) * 0.05);
+
+  // 苦手構文ブースト：unsure 記録が 1 件以上ある構文を含めばスコアを加算（上限 +4.0）
   const weakConstructsHit = constructs.filter(
     (cid) => (weakConstructCounts[cid] ?? 0) > 0,
   );
+  const weakBoost = Math.min(4.0, weakConstructsHit.length * 2.0);
+
+  // 構文が 0 個かつ 25 語未満の単純文はスコア 0（マーク対象外）
+  const rawScore =
+    constructs.length === 0 && wordCount < 25
+      ? 0
+      : constructScore + lengthScore + weakBoost;
+  const hardnessScore = Math.round(rawScore * 100) / 100;
+
+  // difficulty (1..5) は難度スコアから決定
+  let difficulty = 1;
+  if (hardnessScore >= 7.0) {
+    difficulty = 5;
+  } else if (hardnessScore >= 4.5) {
+    difficulty = 4;
+  } else if (hardnessScore >= 2.5) {
+    difficulty = 3;
+  } else if (hardnessScore > 0) {
+    difficulty = 2;
+  }
+
+  // 単文基準の仮 markLevel（ページ全体では applyRelativePageMarks が順位で確定する）
+  let baseLevel: MarkLevel;
+  if (hardnessScore <= 0) {
+    baseLevel = 0;
+  } else if (hardnessScore >= 4.5) {
+    baseLevel = 2;
+  } else {
+    baseLevel = 1;
+  }
 
   let markLevel: MarkLevel = baseLevel;
-  if (weakConstructsHit.length > 0) {
+  if (weakConstructsHit.length > 0 && hardnessScore > 0) {
     markLevel = Math.min(3, Math.max(1, baseLevel) + 1) as MarkLevel;
   }
 
   return {
     constructs,
     difficulty,
+    hardnessScore,
     markLevel,
     weakConstructsHit,
   };
+}
+
+export interface RelativeRankInput {
+  id: string;
+  hardnessScore: number;
+  weakConstructsHit: readonly ConstructId[];
+  viewportOrder?: number;
+}
+
+/**
+ * ページ内の全判定文から、難度スコア上位（low: 10% / normal: 20% / high: 40%）だけをマーク対象とし、
+ * マークした文の中での順位に応じて濃さ（1: 軽め / 2: 標準 / 3: 濃い）を決定する。
+ * 戻り値は各文 id → MarkLevel（マーク対象外は 0）の Map。
+ */
+export function applyRelativePageMarks(
+  items: readonly RelativeRankInput[],
+  options: {
+    totalPageSentences: number;
+    density: MarkDensity;
+  },
+): Map<string, MarkLevel> {
+  const result = new Map<string, MarkLevel>();
+  for (const item of items) {
+    result.set(item.id, 0);
+  }
+
+  const eligible = items.filter((item) => item.hardnessScore > 0);
+  if (eligible.length === 0) {
+    return result;
+  }
+
+  const ratio = MARK_DENSITY_RATIO[options.density] ?? MARK_DENSITY_RATIO.normal;
+  const baseTotal = Math.max(options.totalPageSentences, items.length);
+  const targetCount = Math.min(
+    eligible.length,
+    Math.max(1, Math.round(baseTotal * ratio)),
+  );
+
+  const sorted = [...eligible].sort((a, b) => {
+    if (b.hardnessScore !== a.hardnessScore) {
+      return b.hardnessScore - a.hardnessScore;
+    }
+    if (b.weakConstructsHit.length !== a.weakConstructsHit.length) {
+      return b.weakConstructsHit.length - a.weakConstructsHit.length;
+    }
+    return (a.viewportOrder ?? 0) - (b.viewportOrder ?? 0);
+  });
+
+  const selected = sorted.slice(0, targetCount);
+  const count = selected.length;
+
+  for (let rank = 0; rank < count; rank++) {
+    const item = selected[rank];
+    let level: MarkLevel;
+    if (count === 1) {
+      level = item.weakConstructsHit.length > 0 ? 3 : 2;
+    } else {
+      const pct = rank / count;
+      if (pct < 0.2) {
+        level = 3;
+      } else if (pct < 0.6) {
+        level = 2;
+      } else {
+        level = 1;
+      }
+      if (item.weakConstructsHit.length > 0 && level < 3) {
+        level = (level + 1) as MarkLevel;
+      }
+    }
+    result.set(item.id, level);
+  }
+
+  return result;
 }
 
 export interface BatchCandidateInput {
@@ -363,22 +494,24 @@ export function selectAndBatchCandidates<T extends BatchCandidateInput>(
 
 /**
  * API キー未設定時（クラウド未使用）のルールベース暫定マーク用。
- * ルールスコアから暫定の markLevel（0..2）と difficulty（1..5）を返す。
+ * ルールスコアから暫定の markLevel（0..2）・difficulty（1..5）・hardnessScore を返す。
  */
 export function computeRuleFallbackMark(sentence: string): {
   difficulty: number;
+  hardnessScore: number;
   markLevel: MarkLevel;
   constructs: ConstructId[];
 } {
   const score = computeHardRuleScore(sentence);
   const longSubj = detectLongSubjectFromSentence(sentence);
   const constructs: ConstructId[] = longSubj ? ['long_subject'] : [];
+  const hardnessScore = score >= 4 ? score : 0;
 
   if (score >= 6) {
-    return { difficulty: 4, markLevel: 2, constructs };
+    return { difficulty: 4, hardnessScore, markLevel: 2, constructs };
   }
   if (score >= 4) {
-    return { difficulty: 3, markLevel: 1, constructs };
+    return { difficulty: 3, hardnessScore, markLevel: 1, constructs };
   }
-  return { difficulty: 1, markLevel: 0, constructs };
+  return { difficulty: 1, hardnessScore: 0, markLevel: 0, constructs };
 }

@@ -66,20 +66,14 @@ AIには「構造をJSONで返す」狭い仕事だけを任せます。日本�
 | 単語の意味 | クラウドの Gemini（Flash-Lite）または Gemini Nano（文脈に合う意味を1つ） | 単語をタップしたとき |
 | 詳しい解説 | クラウドの Gemini（Flash系） | 「もっと詳しく」を押したときだけ |
 
-**難文マークの難易度・濃さの計算式（コード側で確定計算）**
+**難文マークのスコア・相対順位・描画方式（コード側で確定計算）**
 
-バッチ判定では AI に `difficulty` を出させず `constructs`（`long_subject` を除く 9 種）だけを返させ、`long_subject` のコード判定・文の長さ・ユーザーの苦手構文（`ConstructEntry` の `unsure` 記録がある構文）から以下で計算する。
+バッチ判定では AI に `difficulty` を出させず `constructs`（`long_subject` を除く 9 種）だけを返させ、`long_subject` のコード判定・構文ごとの誤読重み・文の長さ・ユーザーの苦手構文（`ConstructEntry` の `unsure` 記録）からページ内の相対順位でマーク対象と濃さを決める。
 
-- `effectiveConstructs`：AI が返した `constructs` に、コード判定の `long_subject`（主節の S が `what / whether / that / how / why / to` 始まり・`-ing` 動名詞・6 語以上）を重複なく統合した配列
-- `lengthBonus`：単語数が 30 語以上なら `+2`、20 語以上なら `+1`、20 語未満なら `0`
-- `difficulty`（1〜5）：`clamp(1 + min(3, effectiveConstructs.length) + lengthBonus, 1, 5)`
-- `markLevel`（ハイライトの濃さ 0〜3）：
-  - `baseLevel`：
-    - `0`（マークなし）：`effectiveConstructs.length === 0` かつ 単語数 25 語未満
-    - `1`（薄い黄色）：`effectiveConstructs.length === 1` かつ 単語数 25 語未満、または `effectiveConstructs.length === 0` かつ 単語数 25 語以上
-    - `2`（標準の黄色）：`effectiveConstructs.length >= 2`、または（`effectiveConstructs.length >= 1` かつ 単語数 25 語以上）
-  - 苦手構文ブースト：`effectiveConstructs` にユーザーの苦手構文（`unsure` 1 件以上）が含まれる場合、`markLevel = min(3, max(1, baseLevel) + 1)`（含まれない場合は `markLevel = baseLevel`）
-- 描画方式：本文 DOM を `<mark>` 等で書き換えず、**CSS Custom Highlight API**（`CSS.highlights` に `kaidoku-mark-1` / `kaidoku-mark-2` / `kaidoku-mark-3` を登録）で色付けし、クリック位置から `document.caretPositionFromPoint` で文を特定する。arXiv HTML の文中数式（`.ltx_Math` 等）は送信テキストでは `[MATH]` に置換し、ハイライトの `Range` は元の DOM 範囲をそのまま保つ（`.ltx_equation`・コード・参考文献は対象外）。
+- **構文ごとの重み**：誤読しやすい構文（`omitted_relative`・`inversion`: 3.0、`participle_modifier`・`apposition`・`formal_it`・`participial_construction`: 2.5）を高くし、`long_subject`・`comparative`（1.5）、`coordination`（1.0）、論文で頻出する `relative_clause`（0.8）および文の長さ（20 語超から緩やかに最大 +1.5）の重みを抑える。苦手構文（`unsure` あり）は +2.0/種（上限 +4.0）を加算する
+- **ページ内上位のみマーク**：ページ全体（全 N 文）のうち、難度スコア上位 **20%**（ステータスバーで「少なめ 10% / ふつう 20% / 多め 40%」を API 再呼び出しなしで即時切替・保存可能）だけをマークし、濃さ（レベル 1〜3）もマークした文の中での順位（上位 20%＝レベル 3、20〜60%＝レベル 2、60〜100%＝レベル 1、苦手構文ヒット時は +1 強調）で決定する
+- **描画方式**：本文 DOM を書き換えず **CSS Custom Highlight API** で装飾する。明るいページ・暗いページ（黒背景に白文字）の両方で可読性を保つため、通常マーク（`kaidoku-mark-1` / `2` / `3`）は背景色を付けず **波線の下線（`text-decoration: underline wavy`）の色と太さ** で区別し、タップして選択中の文（`kaidoku-active`）にだけ半透明の背景色を付ける。arXiv HTML の文中数式（`.ltx_Math` 等）は送信テキストでは `[MATH]` に置換し、ハイライトの `Range` は元の DOM 範囲をそのまま保つ（`.ltx_equation`・コード・参考文献は対象外）。
+- **API レート制御**：難文マークバッチ・構造解析・単語の意味取得のすべてのクラウド呼び出しを合算して 1 分あたり 15 回以内に共有レートリミッタで制御する。
 
 **APIキーとプライバシー**：APIキーは今動いているものとは別のプロジェクトで発行する。無料枠では送った内容が製品改善に使われる場合があるため、初回同意画面および設定画面にその旨を表示する。
 
@@ -117,6 +111,7 @@ Nanoには次のJSONスキーマで返させます（Prompt APIの`responseConst
 - `difficulty`：1〜5。難文マークの濃さに使う
 
 記法上の統一ルール：
+- **1 語の S・O・C**：`We`・`It`・`D-Adaptation`・`[MATH]` のように 1 語だけで構成される S・O・C には `[ ]`（`bracket: "noun"`）を付けず、2 語以上の名詞句・名詞節にのみ `[ ]` を付ける（AI 出力・正解ラベルともコード側で統一正規化する）
 - **同格の that 節（`apposition`）**：関係詞節 `( )` と見た目で区別するため、`bracket: "noun"`（`[ ]`）・`role: "modifier"` とし、`modifies` に先行する名詞（外側の名詞句）を指定する
 - **前置詞句**：名詞を修飾する前置詞句は括弧を付けない。動詞・文全体を修飾する前置詞句は `< >`（`bracket: "adv"`）で囲む。どちらにもかかりうる曖昧な文は評価セットに入れない
 

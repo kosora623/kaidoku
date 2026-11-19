@@ -208,12 +208,32 @@ describe('notation', () => {
     };
 
     expect(formatNotationText(sentence, analysis)).toBe(
-      '<Not only> does [the proposed method] S reduce V [memory usage] O, but [it] S <also> improves V [the stability of training on long sequences] O.',
+      '<Not only> does [the proposed method] S reduce V [memory usage] O, but it S <also> improves V [the stability of training on long sequences] O.',
     );
 
     const multiline = formatNotationText(sentence, analysis, {
       multiline: true,
     });
-    expect(multiline).toContain('  [memory usage] O,\n  but\n  [it] S');
+    expect(multiline).toContain('  [memory usage] O,\n  but\n  it S');
+  });
+
+  it('renderNotationHtml({ clickableWords: true }) が単語をクリック可能スパンで包み、[MATH] はラップしない', () => {
+    const sentence = 'We compute [MATH] quickly.';
+    const analysis: Analysis = {
+      spans: [
+        { start: 0, end: 2, role: 'S' },
+        { start: 3, end: 10, role: 'V' },
+        { start: 11, end: 17, role: 'O' },
+        { start: 18, end: 25, role: 'modifier', bracket: 'adv', modifies: 1 },
+      ],
+      constructs: [],
+      difficulty: 1,
+    };
+
+    const html = renderNotationHtml(sentence, analysis, { clickableWords: true });
+    expect(html).toContain('class="kaidoku-word" data-word="compute"');
+    expect(html).toContain('class="kaidoku-word" data-word="quickly"');
+    expect(html).not.toContain('data-word="MATH"');
+    expect(html).toContain('[MATH]');
   });
 });

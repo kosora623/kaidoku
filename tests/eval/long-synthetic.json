@@ -1,0 +1,959 @@
+[
+  {
+    "id": "long-01",
+    "category": "long",
+    "text": "While conventional attention mechanisms incur quadratic memory overhead with respect to sequence length, the block-sparse kernel that we design streams intermediate activations through fast on-chip SRAM and reduces peak device memory by nearly an order of magnitude.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 103,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        },
+        {
+          "start": 105,
+          "end": 143,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 129,
+          "end": 143,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 1
+        },
+        {
+          "start": 144,
+          "end": 151,
+          "role": "V"
+        },
+        {
+          "start": 152,
+          "end": 176,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 177,
+          "end": 202,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        },
+        {
+          "start": 207,
+          "end": 214,
+          "role": "V"
+        },
+        {
+          "start": 215,
+          "end": 233,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 234,
+          "end": 265,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 6
+        }
+      ],
+      "constructs": [
+        "relative_clause",
+        "long_subject",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-02",
+    "category": "long",
+    "text": "The assumption that human preference annotations collected from crowdworkers reflect a single consistent reward function breaks down on open-ended reasoning queries, so policies aligned solely with majority votes often exhibit degraded calibration across minority viewpoints.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 120,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 15,
+          "end": 120,
+          "role": "modifier",
+          "bracket": "noun",
+          "modifies": 0
+        },
+        {
+          "start": 49,
+          "end": 76,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 1
+        },
+        {
+          "start": 121,
+          "end": 132,
+          "role": "V"
+        },
+        {
+          "start": 133,
+          "end": 164,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        },
+        {
+          "start": 169,
+          "end": 212,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 178,
+          "end": 212,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 5
+        },
+        {
+          "start": 213,
+          "end": 218,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 8
+        },
+        {
+          "start": 219,
+          "end": 226,
+          "role": "V"
+        },
+        {
+          "start": 227,
+          "end": 247,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 248,
+          "end": 274,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 8
+        }
+      ],
+      "constructs": [
+        "apposition",
+        "participle_modifier",
+        "long_subject",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-03",
+    "category": "long",
+    "text": "Given the substantial discrepancy between synthetic pretraining distributions and real-world clinical notes recorded across multi-center hospitals, models fine-tuned without explicit domain adaptation frequently misclassify rare conditions that appear in longitudinal patient histories under noisy reporting conventions.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 146,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 5
+        },
+        {
+          "start": 108,
+          "end": 146,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 148,
+          "end": 200,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 155,
+          "end": 200,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        },
+        {
+          "start": 201,
+          "end": 211,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 5
+        },
+        {
+          "start": 212,
+          "end": 223,
+          "role": "V"
+        },
+        {
+          "start": 224,
+          "end": 319,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 240,
+          "end": 319,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 6
+        }
+      ],
+      "constructs": [
+        "participial_construction",
+        "participle_modifier",
+        "relative_clause",
+        "long_subject"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-04",
+    "category": "long",
+    "text": "What our mechanistic probing experiments conducted across twelve intermediate decoder layers demonstrate is that factual recall relies on localized feed-forward circuits, whereas syntactic agreement draws upon distributed attention heads operating across distant token positions.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 104,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 41,
+          "end": 92,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 105,
+          "end": 107,
+          "role": "V"
+        },
+        {
+          "start": 108,
+          "end": 278,
+          "role": "C",
+          "bracket": "noun"
+        },
+        {
+          "start": 238,
+          "end": 278,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 3
+        }
+      ],
+      "constructs": [
+        "long_subject",
+        "participle_modifier"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-05",
+    "category": "long",
+    "text": "It is widely recognized in distributed consensus research that asynchronous network partitions delay leader election unpredictably, yet practical replication protocols deployed in geo-distributed datacenters rarely incorporate formal latency bounds derived under adversarial message scheduling.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 2,
+          "role": "S"
+        },
+        {
+          "start": 3,
+          "end": 23,
+          "role": "V"
+        },
+        {
+          "start": 6,
+          "end": 12,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 24,
+          "end": 57,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 58,
+          "end": 130,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 136,
+          "end": 207,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 168,
+          "end": 207,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 5
+        },
+        {
+          "start": 208,
+          "end": 214,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 8
+        },
+        {
+          "start": 215,
+          "end": 226,
+          "role": "V"
+        },
+        {
+          "start": 227,
+          "end": 293,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 249,
+          "end": 293,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 9
+        }
+      ],
+      "constructs": [
+        "formal_it",
+        "participle_modifier",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-06",
+    "category": "long",
+    "text": "The compression pipeline we introduce quantizes low-sensitivity weight channels to ternary representations while preserving salient outlier weights in half precision, and it achieves lower perplexity than post-training quantization baselines calibrated on significantly larger datasets.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 37,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 25,
+          "end": 37,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 38,
+          "end": 47,
+          "role": "V"
+        },
+        {
+          "start": 48,
+          "end": 79,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 80,
+          "end": 106,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 107,
+          "end": 165,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 171,
+          "end": 173,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 174,
+          "end": 182,
+          "role": "V"
+        },
+        {
+          "start": 183,
+          "end": 199,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 200,
+          "end": 285,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 8
+        },
+        {
+          "start": 242,
+          "end": 285,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 9
+        }
+      ],
+      "constructs": [
+        "omitted_relative",
+        "comparative",
+        "participle_modifier",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-07",
+    "category": "long",
+    "text": "Only after replacing global layer normalization with per-head scaling did the deep vision transformer trained on high-resolution satellite imagery stabilize early optimization dynamics and match the downstream segmentation accuracy achieved by carefully tuned convolutional backbones.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 69,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        },
+        {
+          "start": 74,
+          "end": 146,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 102,
+          "end": 146,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 1
+        },
+        {
+          "start": 147,
+          "end": 156,
+          "role": "V"
+        },
+        {
+          "start": 157,
+          "end": 184,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 189,
+          "end": 194,
+          "role": "V"
+        },
+        {
+          "start": 195,
+          "end": 283,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 232,
+          "end": 283,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 6
+        }
+      ],
+      "constructs": [
+        "inversion",
+        "participle_modifier",
+        "long_subject",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-08",
+    "category": "long",
+    "text": "Combining speculative draft verification with adaptive KV-cache eviction allows long-context language servers to sustain higher serving throughput under bursty traffic patterns, but that aggressive eviction policy occasionally drops distant entity references required for accurate summarization.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 72,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 73,
+          "end": 79,
+          "role": "V"
+        },
+        {
+          "start": 80,
+          "end": 109,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 110,
+          "end": 176,
+          "role": "C",
+          "bracket": "noun"
+        },
+        {
+          "start": 182,
+          "end": 213,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 214,
+          "end": 226,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 6
+        },
+        {
+          "start": 227,
+          "end": 232,
+          "role": "V"
+        },
+        {
+          "start": 233,
+          "end": 294,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 259,
+          "end": 294,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 7
+        }
+      ],
+      "constructs": [
+        "long_subject",
+        "coordination",
+        "participle_modifier"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-09",
+    "category": "long",
+    "text": "The empirical finding that smaller neural networks pruned iteratively during early training stages retain stronger out-of-distribution robustness than dense models trained to zero loss challenges the conventional view linking overparameterization directly to improved generalization.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 184,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 22,
+          "end": 184,
+          "role": "modifier",
+          "bracket": "noun",
+          "modifies": 0
+        },
+        {
+          "start": 51,
+          "end": 98,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 1
+        },
+        {
+          "start": 164,
+          "end": 184,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 1
+        },
+        {
+          "start": 185,
+          "end": 195,
+          "role": "V"
+        },
+        {
+          "start": 196,
+          "end": 282,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 218,
+          "end": 282,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 5
+        }
+      ],
+      "constructs": [
+        "apposition",
+        "participle_modifier",
+        "comparative",
+        "long_subject"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-10",
+    "category": "long",
+    "text": "Whereas prior graph neural networks restricted message passing to immediate one-hop neighbors to control computational complexity, our hierarchical pooling architecture aggregates multi-scale structural motifs efficiently and captures long-range chemical interactions observed in large molecular benchmarks.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 129,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 131,
+          "end": 168,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 169,
+          "end": 179,
+          "role": "V"
+        },
+        {
+          "start": 180,
+          "end": 209,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 210,
+          "end": 221,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 226,
+          "end": 234,
+          "role": "V"
+        },
+        {
+          "start": 235,
+          "end": 306,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 268,
+          "end": 306,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 6
+        }
+      ],
+      "constructs": [
+        "coordination",
+        "participle_modifier"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-dev-02",
+    "category": "long",
+    "text": "Although transformer architectures trained on curated reasoning traces achieve impressive scores on standard mathematical benchmarks, empirical analyses reveal that these models frequently exploit superficial statistical shortcuts rather than acquiring genuine algorithmic generalization across unseen problem lengths.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 132,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        },
+        {
+          "start": 35,
+          "end": 70,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 134,
+          "end": 152,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 153,
+          "end": 159,
+          "role": "V"
+        },
+        {
+          "start": 160,
+          "end": 317,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "participle_modifier"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-dev-03",
+    "category": "long",
+    "text": "Because heterogeneous accelerators exhibit distinct memory bandwidth bottlenecks during autoregressive decoding, the scheduling policy that our framework employs partitions incoming requests dynamically and assigns compute-bound prefill stages to high-throughput GPUs without stalling latency-sensitive generation batches.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 111,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        },
+        {
+          "start": 113,
+          "end": 161,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 135,
+          "end": 161,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 1
+        },
+        {
+          "start": 162,
+          "end": 172,
+          "role": "V"
+        },
+        {
+          "start": 173,
+          "end": 190,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 191,
+          "end": 202,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        },
+        {
+          "start": 207,
+          "end": 214,
+          "role": "V"
+        },
+        {
+          "start": 215,
+          "end": 243,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 244,
+          "end": 267,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 6
+        },
+        {
+          "start": 268,
+          "end": 321,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 6
+        }
+      ],
+      "constructs": [
+        "relative_clause",
+        "long_subject",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-dev-04",
+    "category": "long",
+    "text": "Not only does the proposed variance-reduced estimator eliminate the biased gradient updates observed in asynchronous federated training, but it also guarantees linear convergence under weaker smoothness assumptions than existing methods relying on bounded staleness.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 8,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 14,
+          "end": 53,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 54,
+          "end": 63,
+          "role": "V"
+        },
+        {
+          "start": 64,
+          "end": 135,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 92,
+          "end": 135,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 3
+        },
+        {
+          "start": 141,
+          "end": 143,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 144,
+          "end": 148,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 7
+        },
+        {
+          "start": 149,
+          "end": 159,
+          "role": "V"
+        },
+        {
+          "start": 160,
+          "end": 178,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 179,
+          "end": 265,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 7
+        },
+        {
+          "start": 237,
+          "end": 265,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 9
+        }
+      ],
+      "constructs": [
+        "inversion",
+        "coordination",
+        "participle_modifier",
+        "comparative"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-dev-05",
+    "category": "long",
+    "text": "The observation that compact models distilled from multi-step teacher rationales outperform much larger baselines evaluated under identical compute budgets suggests that data quality plays a more decisive role than raw parameter count.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 155,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 16,
+          "end": 155,
+          "role": "modifier",
+          "bracket": "noun",
+          "modifies": 0
+        },
+        {
+          "start": 36,
+          "end": 80,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 1
+        },
+        {
+          "start": 114,
+          "end": 155,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 1
+        },
+        {
+          "start": 156,
+          "end": 164,
+          "role": "V"
+        },
+        {
+          "start": 165,
+          "end": 234,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "apposition",
+        "participle_modifier",
+        "comparative",
+        "long_subject"
+      ],
+      "difficulty": 5
+    }
+  }
+]

@@ -41,6 +41,45 @@ export function tokenizeWords(sentence: string): WordToken[] {
   return tokens;
 }
 
+/**
+ * 単語境界から生成されたスパン [start, end) の内部に未閉じの "(" があり、
+ * 直後に ")" が続いている場合（例: "(Section 6)", "(Paperno et al., 2016)", "(86 Hz)",
+ * 入れ子の "(large-v2 (Radford et al., 2023))"）、対応する ")" まで end を拡張する。
+ * スパンの内部で "(" が始まっていない場合は直後の ")" を取り込まない。
+ */
+export function expandBalancedClosingParens(
+  sentence: string,
+  start: number,
+  end: number,
+): number {
+  let unmatchedOpen = 0;
+  for (let i = start; i < end; i++) {
+    const ch = sentence[i];
+    if (ch === '(') {
+      unmatchedOpen += 1;
+    } else if (ch === ')' && unmatchedOpen > 0) {
+      unmatchedOpen -= 1;
+    }
+  }
+
+  let nextEnd = end;
+  while (unmatchedOpen > 0 && nextEnd < sentence.length) {
+    const ch = sentence[nextEnd];
+    if (ch === ')') {
+      nextEnd += 1;
+      unmatchedOpen -= 1;
+    } else if (ch === '.' && sentence[nextEnd + 1] === ')') {
+      // 例: "(etc.)" のようにピリオド直後に ")" が続くケース
+      nextEnd += 2;
+      unmatchedOpen -= 1;
+    } else {
+      break;
+    }
+  }
+
+  return nextEnd;
+}
+
 function validateWordRange(
   startWord: unknown,
   endWord: unknown,
@@ -77,16 +116,88 @@ function validateWordRange(
   return { startWord, endWord };
 }
 
+const VALID_BRACKETS_SET = new Set(['noun', 'adj', 'adv']);
+const NOUN_CONTAINER_ROLES = new Set(['S', 'O', 'C']);
+
+/**
+ * AI 出力の文字スパン配列から、再試行するまでもない軽い検証エラーを自動修復する。
+ * - modifies が自分自身・範囲外・非整数（単語番号の誤記など）を指す場合 → modifies を除去
+ * - role="modifier" なのに bracket がない（または不正）場合 → S/O/C スパンの内側なら adj、それ以外は adv を補完
+ * 修復した内容の日本語ログ配列を返す（修復なしなら空配列）。
+ */
+export function repairMinorSpanIssues(
+  spans: Array<Partial<AnalysisSpan> & Record<string, unknown>>,
+): string[] {
+  const repairs: string[] = [];
+
+  for (let i = 0; i < spans.length; i++) {
+    const span = spans[i];
+
+    // 1. 不正な modifies（自己参照・範囲外・単語番号誤記など）を除去
+    if (span.modifies !== undefined) {
+      const m = span.modifies;
+      const isInvalidModifies =
+        typeof m !== 'number' ||
+        !Number.isInteger(m) ||
+        m < 0 ||
+        m >= spans.length ||
+        m === i;
+      if (isInvalidModifies) {
+        delete span.modifies;
+        repairs.push(
+          `spans[${i}] の不正な modifies（${String(m)}）を除去しました。`,
+        );
+      }
+    }
+
+    // 2. role="modifier" で bracket が欠落している場合に adj / adv を補完
+    if (
+      span.role === 'modifier' &&
+      (typeof span.bracket !== 'string' || !VALID_BRACKETS_SET.has(span.bracket))
+    ) {
+      const start = typeof span.start === 'number' ? span.start : -1;
+      const end = typeof span.end === 'number' ? span.end : -1;
+      const insideNounContainer =
+        start >= 0 &&
+        end > start &&
+        spans.some(
+          (other, j) =>
+            j !== i &&
+            typeof other.role === 'string' &&
+            NOUN_CONTAINER_ROLES.has(other.role) &&
+            typeof other.start === 'number' &&
+            typeof other.end === 'number' &&
+            other.start <= start &&
+            end <= other.end,
+        );
+      const inferred: AnalysisSpan['bracket'] = insideNounContainer ? 'adj' : 'adv';
+      span.bracket = inferred;
+      repairs.push(
+        `spans[${i}]（modifier）に不足していた bracket="${inferred}" を補完しました。`,
+      );
+    }
+  }
+
+  return repairs;
+}
+
+/** 単語番号ベース解析の変換結果（自動修復ログ付き） */
+export interface ConvertedWordAnalysisResult {
+  analysis: Analysis;
+  repaired: string[];
+}
+
 /**
  * AI が返した単語番号ベース（mainVerbs + spans）の解析 JSON を
  * SPEC.md 準拠の文字位置ベース（start / end）の Analysis へ変換し、
- * long_subject のコード判定を適用したうえで validateAnalysis で検証して返す。
+ * 軽い検証エラー（不正な modifies・modifier の bracket 欠落）を自動修復したうえで
+ * validateAnalysis で検証して返す。
  */
-export function convertWordAnalysisToCharAnalysis(
+export function convertWordAnalysisToCharAnalysisWithRepairs(
   sentence: string,
   raw: unknown,
   tokens: WordToken[] = tokenizeWords(sentence),
-): Analysis {
+): ConvertedWordAnalysisResult {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new AnalysisValidationError(
       'INVALID_SHAPE',
@@ -143,9 +254,15 @@ export function convertWordAnalysisToCharAnalysis(
       raw,
     );
 
+    const start = tokens[startWord].start;
+    const end = expandBalancedClosingParens(
+      sentence,
+      start,
+      tokens[endWord].end,
+    );
     const charSpan: Partial<AnalysisSpan> & Record<string, unknown> = {
-      start: tokens[startWord].start,
-      end: tokens[endWord].end,
+      start,
+      end,
       role: s.role as AnalysisSpan['role'],
     };
 
@@ -212,6 +329,9 @@ export function convertWordAnalysisToCharAnalysis(
     }
   }
 
+  // 2.5. 軽い検証エラー（不正な modifies・modifier の bracket 欠落）を検証・再試行前に自動修復する
+  const repaired = repairMinorSpanIssues(convertedSpans);
+
   // 3. constructs：AI が万一 long_subject を返しても一旦取り除き、コード側のルールで確定判定する
   const rawConstructs = Array.isArray(obj.constructs) ? obj.constructs : obj.constructs;
   const baseConstructs = Array.isArray(rawConstructs)
@@ -235,7 +355,22 @@ export function convertWordAnalysisToCharAnalysis(
   }
 
   return {
-    ...validated,
-    constructs: finalConstructs,
+    analysis: {
+      ...validated,
+      constructs: finalConstructs,
+    },
+    repaired,
   };
+}
+
+/**
+ * 既存呼び出し互換用：自動修復・検証済みの Analysis のみを返す。
+ */
+export function convertWordAnalysisToCharAnalysis(
+  sentence: string,
+  raw: unknown,
+  tokens: WordToken[] = tokenizeWords(sentence),
+): Analysis {
+  return convertWordAnalysisToCharAnalysisWithRepairs(sentence, raw, tokens)
+    .analysis;
 }

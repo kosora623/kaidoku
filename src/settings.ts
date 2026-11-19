@@ -1,7 +1,7 @@
-import type { CloudConsentState, NanoPromptMode } from './types';
+import type { CloudConsentState, MarkDensity, NanoPromptMode } from './types';
 
 /**
- * 拡張機能の設定（Gemini API キー、外部送信同意状態、Nano プロンプト方式など）を
+ * 拡張機能の設定（Gemini API キー、外部送信同意状態、Nano プロンプト方式、マーク量など）を
  * chrome.storage.local で管理する。
  */
 
@@ -12,12 +12,15 @@ export interface KaidokuSettings {
   geminiApiKey: string;
   /** Gemini Nano のプロンプト方式（既定: 'one-stage'） */
   nanoPromptMode: NanoPromptMode;
+  /** ページ内の難文マーク量（low: 10% / normal: 20% / high: 40%、既定: 'normal'） */
+  markDensity: MarkDensity;
   /** 外部データ送信（Google Gemini API）に対する初回同意状態 */
   cloudConsent: CloudConsentState;
 }
 
 const STORAGE_KEY_API_KEY = 'kaidoku_gemini_api_key';
 const STORAGE_KEY_NANO_PROMPT_MODE = 'kaidoku_nano_prompt_mode';
+const STORAGE_KEY_MARK_DENSITY = 'kaidoku_mark_density';
 const STORAGE_KEY_CLOUD_CONSENT = 'kaidoku_cloud_consent';
 
 const DEFAULT_CONSENT: CloudConsentState = {
@@ -32,19 +35,25 @@ export async function loadSettings(): Promise<KaidokuSettings> {
     return {
       geminiApiKey: '',
       nanoPromptMode: 'one-stage',
+      markDensity: 'normal',
       cloudConsent: { ...DEFAULT_CONSENT },
     };
   }
   const stored = await chrome.storage.local.get([
     STORAGE_KEY_API_KEY,
     STORAGE_KEY_NANO_PROMPT_MODE,
+    STORAGE_KEY_MARK_DENSITY,
     STORAGE_KEY_CLOUD_CONSENT,
   ]);
   const rawKey = stored[STORAGE_KEY_API_KEY];
   const rawMode = stored[STORAGE_KEY_NANO_PROMPT_MODE];
+  const rawDensity = stored[STORAGE_KEY_MARK_DENSITY];
   const rawConsent = stored[STORAGE_KEY_CLOUD_CONSENT] as
     | Partial<CloudConsentState>
     | undefined;
+
+  const markDensity: MarkDensity =
+    rawDensity === 'low' || rawDensity === 'high' ? rawDensity : 'normal';
 
   const consent: CloudConsentState =
     rawConsent &&
@@ -64,8 +73,19 @@ export async function loadSettings(): Promise<KaidokuSettings> {
   return {
     geminiApiKey: typeof rawKey === 'string' ? rawKey.trim() : '',
     nanoPromptMode: rawMode === 'two-stage' ? 'two-stage' : 'one-stage',
+    markDensity,
     cloudConsent: consent,
   };
+}
+
+/** ページ内の難文マーク量（少なめ / ふつう / 多め）を保存する */
+export async function saveMarkDensity(density: MarkDensity): Promise<void> {
+  if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+    return;
+  }
+  await chrome.storage.local.set({
+    [STORAGE_KEY_MARK_DENSITY]: density,
+  });
 }
 
 /** Gemini API キーを保存する */

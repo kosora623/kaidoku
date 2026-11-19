@@ -118,10 +118,18 @@ export interface MainVerbWordSpan {
 export interface AnalyzeTiming {
   /** 土台セッションの新規作成にかかった時間（ms）。再利用時・Cloud時は 0 */
   sessionCreateMs: number;
-  /** 解析（clone + prompt + 再試行 + 変換・検証）にかかった時間（ms） */
+  /** 解析（clone + prompt + 再試行 + 変換・検証・待機込み）にかかった時間（ms） */
   analyzeMs: number;
   /** 合計時間（ms） */
   totalMs: number;
+  /** 2段階解析の 1 段目（骨格抽出）にかかった時間（ms、レート制限待機を除く） */
+  stage1Ms?: number;
+  /** 本解析（1段階、または 2段階の 2 段目初回）にかかった時間（ms、レート制限待機を除く） */
+  stage2Ms?: number;
+  /** 検証エラーによる再試行にかかった時間（ms、レート制限待機を除く） */
+  retryMs?: number;
+  /** RPM 制御および 429 / 503 リトライによる待ち時間合計（ms） */
+  waitMs?: number;
 }
 
 /** 再試行時に発生した初回検証エラーの記録 */
@@ -145,6 +153,8 @@ export interface AnalyzeResult {
   sessionCreated: boolean;
   /** 試行回数（1 = 初回成功、2 = 1回再試行で成功） */
   attempts: number;
+  /** 軽い検証エラー（不正な modifies・modifier の bracket 欠落）を自動修復した内容 */
+  repaired?: string[];
   /** 再試行が発生した場合の初回失敗情報 */
   firstAttemptError?: RetryErrorRecord;
   /** Nano 失敗などにより別プロバイダへ切り替わった理由 */
@@ -180,6 +190,9 @@ export interface PromptApiProbeResult {
 /** 難文ハイライトの濃さ段階（0: マークなし / 1: 薄め / 2: 標準 / 3: 濃い・苦手構文強調） */
 export type MarkLevel = 0 | 1 | 2 | 3;
 
+/** ページ内マーク密度のユーザー設定（low: 上位10% / normal: 上位20% / high: 上位40%） */
+export type MarkDensity = 'low' | 'normal' | 'high';
+
 /** 外部（Google Gemini API）データ送信の同意状態 */
 export interface CloudConsentState {
   granted: boolean;
@@ -210,13 +223,15 @@ export interface PageMarkCache {
   expiresAt: string;
 }
 
-/** Content Script へ返す 1 文分のハイライト指示 */
+/** Content Script へ返す 1 文分の判定結果（密度切替時の再計算に使うスコアも含む） */
 export interface MarkedSentencePayload {
   id: string;
   sentenceHash: string;
   text: string;
   constructs: ConstructId[];
   difficulty: number;
+  /** ページ内相対順位づけ用の難度スコア（高いほど難文） */
+  hardnessScore: number;
   markLevel: MarkLevel;
   weakConstructsHit: ConstructId[];
 }

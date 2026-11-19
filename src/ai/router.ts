@@ -5,7 +5,11 @@ import type {
   AnalyzeResult,
   NanoPromptMode,
 } from '../types';
-import { analyzeWithCloud, DEFAULT_CLOUD_MODEL } from './cloud';
+import {
+  analyzeWithCloud,
+  DEFAULT_CLOUD_MODEL,
+  type Stage1SkeletonProgress,
+} from './cloud';
 import { analyzeWithNano, getNanoAvailability } from './nano';
 import type { LanguageModelAvailability, LanguageModelMonitor } from './prompt-api';
 
@@ -27,6 +31,8 @@ export interface AnalyzeSentenceOptions {
   apiKey?: string;
   /** クラウドモデルの上書き */
   cloudModel?: string;
+  /** 2段階解析の 1 段目（骨格抽出）完了直後の通知コールバック */
+  onStage1Complete?: (progress: Stage1SkeletonProgress) => void;
   /** availability が downloadable のときに Nano ダウンロードを許可するか */
   allowNanoDownload?: boolean;
   monitor?: (m: LanguageModelMonitor) => void;
@@ -91,6 +97,7 @@ export async function analyzeSentence(
   if (preference === 'cloud') {
     return analyzeWithCloud(sentence, apiKey, {
       model: options?.cloudModel,
+      onStage1Complete: options?.onStage1Complete,
       signal: options?.signal,
     });
   }
@@ -118,6 +125,7 @@ export async function analyzeSentence(
   if (apiKey) {
     return analyzeWithCloud(sentence, apiKey, {
       model: options?.cloudModel,
+      onStage1Complete: options?.onStage1Complete,
       signal: options?.signal,
     });
   }

@@ -1,6 +1,7 @@
 /**
  * npm run eval:labels 実行スクリプト
- * tests/eval/sentences.json と tests/eval/dev-sentences.json の expected を
+ * tests/eval/ 配下の各データセット（sentences.json / dev-sentences.json /
+ * long-sentences.json / long-dev-sentences.json）の expected を
  * 英文解釈の複数行記法と constructs 一覧に変換し、tests/eval/labels-review.md へ出力する。
  */
 
@@ -11,9 +12,8 @@ import { pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const ROOT_DIR = process.cwd();
-const TEST_JSON_PATH = path.join(ROOT_DIR, 'tests', 'eval', 'sentences.json');
-const DEV_JSON_PATH = path.join(ROOT_DIR, 'tests', 'eval', 'dev-sentences.json');
-const OUT_MD_PATH = path.join(ROOT_DIR, 'tests', 'eval', 'labels-review.md');
+const EVAL_DIR = path.join(ROOT_DIR, 'tests', 'eval');
+const OUT_MD_PATH = path.join(EVAL_DIR, 'labels-review.md');
 
 async function loadFormatter() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaidoku-labels-'));
@@ -36,8 +36,18 @@ async function loadFormatter() {
 }
 
 async function main() {
-  const testItems = JSON.parse(fs.readFileSync(TEST_JSON_PATH, 'utf8'));
-  const devItems = JSON.parse(fs.readFileSync(DEV_JSON_PATH, 'utf8'));
+  const testItems = JSON.parse(
+    fs.readFileSync(path.join(EVAL_DIR, 'sentences.json'), 'utf8'),
+  );
+  const devItems = JSON.parse(
+    fs.readFileSync(path.join(EVAL_DIR, 'dev-sentences.json'), 'utf8'),
+  );
+  const longTestItems = JSON.parse(
+    fs.readFileSync(path.join(EVAL_DIR, 'long-sentences.json'), 'utf8'),
+  );
+  const longDevItems = JSON.parse(
+    fs.readFileSync(path.join(EVAL_DIR, 'long-dev-sentences.json'), 'utf8'),
+  );
 
   const { mod, cleanup } = await loadFormatter();
   try {
@@ -52,11 +62,26 @@ async function main() {
         sourcePath: 'tests/eval/dev-sentences.json',
         items: devItems,
       },
+      {
+        title: '長文 本番評価セット（long-sentences.json）',
+        sourcePath: 'tests/eval/long-sentences.json',
+        items: longTestItems,
+      },
+      {
+        title: '長文 プロンプト調整セット（long-dev-sentences.json）',
+        sourcePath: 'tests/eval/long-dev-sentences.json',
+        items: longDevItems,
+      },
     ]);
 
+    const total =
+      testItems.length +
+      devItems.length +
+      longTestItems.length +
+      longDevItems.length;
     fs.writeFileSync(OUT_MD_PATH, markdown, 'utf8');
     console.log(
-      `正解ラベル確認シートを出力しました: ${path.relative(ROOT_DIR, OUT_MD_PATH)}（計 ${testItems.length + devItems.length} 文）`,
+      `正解ラベル確認シートを出力しました: ${path.relative(ROOT_DIR, OUT_MD_PATH)}（計 ${total} 文）`,
     );
   } finally {
     cleanup();

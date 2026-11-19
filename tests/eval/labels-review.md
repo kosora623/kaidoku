@@ -1,7 +1,7 @@
 # χ読 評価データ正解ラベル確認シート
 
 このファイルは `npm run eval:labels` で自動生成されています。
-正解ラベルを修正する場合は `tests/eval/sentences.json` または `tests/eval/dev-sentences.json` を編集し、`npm run eval:labels` と `npm test` を再実行してください。
+正解ラベルを修正する場合は `tests/eval/` 配下の該当 JSON（`sentences.json` / `dev-sentences.json` / `long-sentences.json` / `long-dev-sentences.json`）を編集し、`npm run eval:labels` と `npm test` を再実行してください。
 
 ## 本番評価セット（sentences.json）（30 文）
 
@@ -411,7 +411,7 @@ It S
   reduce V
   [memory usage] O,
   but
-  [it] S
+  it S
   <also>
   improves V
   [the stability of training on long sequences] O.
@@ -560,3 +560,287 @@ It S
 
 - **constructs**: `coordination`（並列）
 - **modifies**: `automatically` → `marks`
+
+## 長文 本番評価セット（long-sentences.json）（10 文）
+
+元ファイル: `tests/eval/long-sentences.json`
+
+### long-01（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2312.11805v5
+
+> Our modeling mitigation of safety risks, applied across Gemini Advanced and Gemini API Ultra models, is mostly through post-training (Section 6), encompassing supervised fine-tuning (SFT) and reinforcement learning through human feedback (RLHF) using a reward model (Bai et al., 2022a).
+
+```text
+[Our modeling mitigation of safety risks, (applied across Gemini Advanced and Gemini API Ultra models)] S,
+  is V
+  <mostly>
+  <through post-training (Section 6)>,
+  (encompassing supervised fine-tuning (SFT) and reinforcement learning through human feedback (RLHF) (using a reward model (Bai et al., 2022a))).
+```
+
+- **constructs**: `participle_modifier`（分詞の後置修飾）, `long_subject`（長い主語）
+- **modifies**: `applied across Gemini Advanced and Gemini API Ultra models` → `Our modeling mitigation of safety risks, applied across Gemini Advanced and Gemini API Ultra models` / `mostly` → `is` / `through post-training (Section 6)` → `is` / `encompassing supervised fine-tuning (SFT) and reinforcement learning through human feedback (RLHF) using a reward model (Bai et al., 2022a)` → `through post-training (Section 6)` / `using a reward model (Bai et al., 2022a)` → `encompassing supervised fine-tuning (SFT) and reinforcement learning through human feedback (RLHF) using a reward model (Bai et al., 2022a)`
+
+### long-02（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2312.11805v5
+
+> We performed an extensive leaked data analysis after training to ensure the results we report here are as scientifically sound as possible, but still found some minor issues and decided not to report results on e.g. LAMBADA (Paperno et al., 2016).
+
+```text
+We S
+  performed V
+  [an extensive leaked data analysis] O
+  <after training>
+  <to ensure the results (we report here) are as scientifically sound as possible>,
+  but
+  <still>
+  found V
+  [some minor issues] O
+  and
+  decided V
+  [not to report results on e.g. LAMBADA (Paperno et al., 2016)] O.
+```
+
+- **constructs**: `omitted_relative`（関係詞の省略）, `comparative`（比較構文）, `coordination`（並列）
+- **modifies**: `after training` → `performed` / `to ensure the results we report here are as scientifically sound as possible` → `performed` / `we report here` → `to ensure the results we report here are as scientifically sound as possible` / `still` → `found`
+
+### long-03（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2312.11805v5
+
+> For example, on the recent MMMU benchmark (Yue et al., 2023), that comprises questions about images on multi-discipline tasks requiring college-level subject knowledge and deliberate reasoning, Gemini Ultra achieves a new state-of-the-art score of 62.4%, outperforming the previous best model by more than 5 percentage points.
+
+```text
+<For example>,
+  <on the recent MMMU benchmark (Yue et al., 2023), (that comprises questions about images on multi-discipline tasks (requiring college-level subject knowledge and deliberate reasoning))>,
+  [Gemini Ultra] S
+  achieves V
+  [a new state-of-the-art score of 62.4%] O,
+  <outperforming the previous best model by more than 5 percentage points>.
+```
+
+- **constructs**: `relative_clause`（関係詞節）, `participle_modifier`（分詞の後置修飾）, `participial_construction`（分詞構文）, `comparative`（比較構文）
+- **modifies**: `For example` → `achieves` / `on the recent MMMU benchmark (Yue et al., 2023), that comprises questions about images on multi-discipline tasks requiring college-level subject knowledge and deliberate reasoning` → `achieves` / `that comprises questions about images on multi-discipline tasks requiring college-level subject knowledge and deliberate reasoning` → `on the recent MMMU benchmark (Yue et al., 2023), that comprises questions about images on multi-discipline tasks requiring college-level subject knowledge and deliberate reasoning` / `requiring college-level subject knowledge and deliberate reasoning` → `that comprises questions about images on multi-discipline tasks requiring college-level subject knowledge and deliberate reasoning` / `outperforming the previous best model by more than 5 percentage points` → `achieves`
+
+### long-04（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2312.11805v5
+
+> We find that introducing this image-text data preserves Gemini Apps model quality on text-only tasks, with a SxS score on text-only tasks of +0.01[MATH]0.01 for a Gemini Apps Pro model trained on this data versus an equivalent model trained only on text data.
+
+```text
+We S
+  find V
+  [that introducing this image-text data preserves Gemini Apps model quality on text-only tasks, with a SxS score on text-only tasks of +0.01[MATH]0.01 for a Gemini Apps Pro model (trained on this data) versus an equivalent model (trained only on text data)] O.
+```
+
+- **constructs**: `participle_modifier`（分詞の後置修飾）
+- **modifies**: `trained on this data` → `that introducing this image-text data preserves Gemini Apps model quality on text-only tasks, with a SxS score on text-only tasks of +0.01[MATH]0.01 for a Gemini Apps Pro model trained on this data versus an equivalent model trained only on text data` / `trained only on text data` → `that introducing this image-text data preserves Gemini Apps model quality on text-only tasks, with a SxS score on text-only tasks of +0.01[MATH]0.01 for a Gemini Apps Pro model trained on this data versus an equivalent model trained only on text data`
+
+### long-05（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://ar5iv.labs.arxiv.org/html/2306.05284
+
+> We remove annotators who did not listen to the full recordings, annotators who rate the reference recordings less than [MATH], and the rest of the recommended recipes from CrowdMOS (Ribeiro et al. 2011).
+
+```text
+We S
+  remove V
+  [annotators (who did not listen to the full recordings), annotators (who rate the reference recordings less than [MATH]), and the rest of the recommended recipes from CrowdMOS (Ribeiro et al. 2011)] O.
+```
+
+- **constructs**: `relative_clause`（関係詞節）, `comparative`（比較構文）, `coordination`（並列）
+- **modifies**: `who did not listen to the full recordings` → `annotators who did not listen to the full recordings, annotators who rate the reference recordings less than [MATH], and the rest of the recommended recipes from CrowdMOS (Ribeiro et al. 2011)` / `who rate the reference recordings less than [MATH]` → `annotators who did not listen to the full recordings, annotators who rate the reference recordings less than [MATH], and the rest of the recommended recipes from CrowdMOS (Ribeiro et al. 2011)`
+
+### long-06（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://ar5iv.labs.arxiv.org/html/2306.05284
+
+> D-Adaptation is a novel automated way of selecting the overall learning rate of the Adam optimizer, i.e. its [MATH] parameter, dynamically throughout the training, introduced by Defazio and Mishchenko 2023.
+
+```text
+D-Adaptation S
+  is V
+  [a novel automated way of selecting the overall learning rate of the Adam optimizer, i.e. its [MATH] parameter, dynamically throughout the training, (introduced by Defazio and Mishchenko 2023)] C.
+```
+
+- **constructs**: `participle_modifier`（分詞の後置修飾）
+- **modifies**: `introduced by Defazio and Mishchenko 2023` → `a novel automated way of selecting the overall learning rate of the Adam optimizer, i.e. its [MATH] parameter, dynamically throughout the training, introduced by Defazio and Mishchenko 2023`
+
+### long-07（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://ar5iv.labs.arxiv.org/html/2306.05284
+
+> The EnCodec model used in this work was specifically designed to operate at a lower frame rate (50 Hz) than DAC (86 Hz), thus reducing by 40% the inference runtime for producing the same audio.
+
+```text
+[The EnCodec model (used in this work)] S
+  was <specifically> designed V
+  <to operate at a lower frame rate (50 Hz) than DAC (86 Hz)>,
+  <thus reducing by 40% the inference runtime for producing the same audio>.
+```
+
+- **constructs**: `participle_modifier`（分詞の後置修飾）, `long_subject`（長い主語）, `comparative`（比較構文）, `participial_construction`（分詞構文）
+- **modifies**: `used in this work` → `The EnCodec model used in this work` / `specifically` → `was specifically designed` / `to operate at a lower frame rate (50 Hz) than DAC (86 Hz)` → `was specifically designed` / `thus reducing by 40% the inference runtime for producing the same audio` → `was specifically designed`
+
+### long-08（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2611.24931v1
+
+> For endpoint signals [MATH] and a loss [MATH], the vector of derivatives of the relays’ payoffs with respect to their own signals is [MATH], where [MATH] is uniform within the first and last layers.
+
+```text
+<For endpoint signals [MATH] and a loss [MATH]>,
+  [the vector of derivatives of the relays’ payoffs with respect to their own signals] S
+  is V
+  [MATH] C,
+  (where [MATH] is uniform within the first and last layers).
+```
+
+- **constructs**: `long_subject`（長い主語）, `relative_clause`（関係詞節）
+- **modifies**: `For endpoint signals [MATH] and a loss [MATH]` → `is` / `where [MATH] is uniform within the first and last layers` → `[MATH]`
+
+### long-09（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2611.24931v1
+
+> Replacing the current profile by its canonical decoding changes the current raw payoff by at most [MATH], and replacing only the opponents in the deviating payoff changes that payoff by at most [MATH].
+
+```text
+[Replacing the current profile by its canonical decoding] S
+  changes V
+  [the current raw payoff] O
+  <by at most [MATH]>,
+  and
+  [replacing only the opponents in the deviating payoff] S
+  changes V
+  [that payoff] O
+  <by at most [MATH]>.
+```
+
+- **constructs**: `long_subject`（長い主語）, `coordination`（並列）
+- **modifies**: `by at most [MATH]` → `changes` / `by at most [MATH]` → `changes`
+
+### long-10（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2611.24931v1
+
+> We insert relay firms between the sender and receiver to amplify the term proportional to [MATH] while keeping the receiver’s own payoff curvature and the influence in the opposite direction bounded.
+
+```text
+We S
+  insert V
+  [relay firms] O
+  <between the sender and receiver>
+  <to amplify the term proportional to [MATH]>
+  <while keeping the receiver’s own payoff curvature and the influence in the opposite direction bounded>.
+```
+
+- **constructs**: `participial_construction`（分詞構文）, `coordination`（並列）
+- **modifies**: `between the sender and receiver` → `insert` / `to amplify the term proportional to [MATH]` → `insert` / `while keeping the receiver’s own payoff curvature and the influence in the opposite direction bounded` → `insert`
+
+## 長文 プロンプト調整セット（long-dev-sentences.json）（5 文）
+
+元ファイル: `tests/eval/long-dev-sentences.json`
+
+### long-dev-01（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2611.24931v1
+
+> Such routing strategy spaces differ from the singleton structure underlying network Cournot games, so that result neither gives our restricted hardness instances nor conflicts with our positive results.
+
+```text
+[Such routing strategy spaces] S
+  differ V
+  <from the singleton structure (underlying network Cournot games)>,
+  so
+  [that result] S
+  neither
+  gives V
+  [our restricted hardness instances] O
+  nor
+  conflicts V
+  <with our positive results>.
+```
+
+- **constructs**: `participle_modifier`（分詞の後置修飾）, `coordination`（並列）
+- **modifies**: `from the singleton structure underlying network Cournot games` → `differ` / `underlying network Cournot games` → `from the singleton structure underlying network Cournot games` / `with our positive results` → `conflicts`
+
+### long-dev-02（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2611.24931v1
+
+> A source has at most [MATH] distinct opponents: an outgoing chain has [MATH] first-layer opponents, an incoming chain has [MATH] last-layer opponents, and there are at most twelve chains of each kind.
+
+```text
+[A source] S
+  has V
+  [at most [MATH] distinct opponents] O:
+  [an outgoing chain] S
+  has V
+  [[MATH] first-layer opponents] O,
+  [an incoming chain] S
+  has V
+  [[MATH] last-layer opponents] O,
+  and there
+  are V
+  [at most twelve chains of each kind] S.
+```
+
+- **constructs**: `coordination`（並列）
+
+### long-dev-03（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://arxiv.org/html/2312.11805v5
+
+> The GSPMD partitioner (Xu et al., 2021) in the XLA compiler partitions the training step computation, and the MegaScale XLA compiler (XLA, 2019) pass statically schedules appropriate collectives so that they maximally overlap with the computation with very little variation in step time.
+
+```text
+[The GSPMD partitioner (Xu et al., 2021) in the XLA compiler] S
+  partitions V
+  [the training step computation] O,
+  and
+  [the MegaScale XLA compiler (XLA, 2019) pass] S
+  <statically>
+  schedules V
+  [appropriate collectives] O
+  <so that they maximally overlap with the computation with very little variation in step time>.
+```
+
+- **constructs**: `long_subject`（長い主語）, `coordination`（並列）
+- **modifies**: `statically` → `schedules` / `so that they maximally overlap with the computation with very little variation in step time` → `schedules`
+
+### long-dev-04（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://ar5iv.labs.arxiv.org/html/2306.05284
+
+> For instance, MusicLM (Agostinelli et al. 2023) uses two models, one modeling the flattened first [MATH] codebooks, and a second one the other [MATH] flattened codebooks, conditioned on the decision of the first model.
+
+```text
+<For instance>,
+  [MusicLM (Agostinelli et al. 2023)] S
+  uses V
+  [two models, one (modeling the flattened first [MATH] codebooks), and a second one the other [MATH] flattened codebooks, (conditioned on the decision of the first model)] O.
+```
+
+- **constructs**: `participle_modifier`（分詞の後置修飾）, `coordination`（並列）
+- **modifies**: `For instance` → `uses` / `modeling the flattened first [MATH] codebooks` → `two models, one modeling the flattened first [MATH] codebooks, and a second one the other [MATH] flattened codebooks, conditioned on the decision of the first model` / `conditioned on the decision of the first model` → `two models, one modeling the flattened first [MATH] codebooks, and a second one the other [MATH] flattened codebooks, conditioned on the decision of the first model`
+
+### long-dev-05（カテゴリ: `long` / 難易度: 5）
+
+- **出典**: https://ar5iv.labs.arxiv.org/html/2306.05284
+
+> Following Kreuk et al. 2022, we use a state-of-the-art audio classifier trained for classification on AudioSet (Koutini et al. 2021) to compute the KL-divergence over the probabilities of the labels between the original and the generated music.
+
+```text
+<Following Kreuk et al. 2022>,
+  we S
+  use V
+  [a state-of-the-art audio classifier (trained for classification on AudioSet (Koutini et al. 2021))] O
+  <to compute the KL-divergence over the probabilities of the labels between the original and the generated music>.
+```
+
+- **constructs**: `participial_construction`（分詞構文）, `participle_modifier`（分詞の後置修飾）
+- **modifies**: `Following Kreuk et al. 2022` → `use` / `trained for classification on AudioSet (Koutini et al. 2021)` → `a state-of-the-art audio classifier trained for classification on AudioSet (Koutini et al. 2021)` / `to compute the KL-divergence over the probabilities of the labels between the original and the generated music` → `use`

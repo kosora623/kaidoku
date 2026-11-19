@@ -1,0 +1,563 @@
+[
+  {
+    "id": "long-01",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2312.11805v5",
+    "text": "Our modeling mitigation of safety risks, applied across Gemini Advanced and Gemini API Ultra models, is mostly through post-training (Section 6), encompassing supervised fine-tuning (SFT) and reinforcement learning through human feedback (RLHF) using a reward model (Bai et al., 2022a).",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 99,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 41,
+          "end": 99,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 101,
+          "end": 103,
+          "role": "V"
+        },
+        {
+          "start": 104,
+          "end": 110,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 111,
+          "end": 144,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 146,
+          "end": 285,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 4
+        },
+        {
+          "start": 245,
+          "end": 285,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 5
+        }
+      ],
+      "constructs": [
+        "participle_modifier",
+        "long_subject"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-02",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2312.11805v5",
+    "text": "We performed an extensive leaked data analysis after training to ensure the results we report here are as scientifically sound as possible, but still found some minor issues and decided not to report results on e.g. LAMBADA (Paperno et al., 2016).",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 2,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 3,
+          "end": 12,
+          "role": "V"
+        },
+        {
+          "start": 13,
+          "end": 46,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 47,
+          "end": 61,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 62,
+          "end": 138,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 84,
+          "end": 98,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 4
+        },
+        {
+          "start": 144,
+          "end": 149,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 7
+        },
+        {
+          "start": 150,
+          "end": 155,
+          "role": "V"
+        },
+        {
+          "start": 156,
+          "end": 173,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 178,
+          "end": 185,
+          "role": "V"
+        },
+        {
+          "start": 186,
+          "end": 246,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "omitted_relative",
+        "comparative",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-03",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2312.11805v5",
+    "text": "For example, on the recent MMMU benchmark (Yue et al., 2023), that comprises questions about images on multi-discipline tasks requiring college-level subject knowledge and deliberate reasoning, Gemini Ultra achieves a new state-of-the-art score of 62.4%, outperforming the previous best model by more than 5 percentage points.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 11,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 5
+        },
+        {
+          "start": 13,
+          "end": 192,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 5
+        },
+        {
+          "start": 62,
+          "end": 192,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 1
+        },
+        {
+          "start": 126,
+          "end": 192,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        },
+        {
+          "start": 194,
+          "end": 206,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 207,
+          "end": 215,
+          "role": "V"
+        },
+        {
+          "start": 216,
+          "end": 253,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 255,
+          "end": 325,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 5
+        }
+      ],
+      "constructs": [
+        "relative_clause",
+        "participle_modifier",
+        "participial_construction",
+        "comparative"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-04",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2312.11805v5",
+    "text": "We find that introducing this image-text data preserves Gemini Apps model quality on text-only tasks, with a SxS score on text-only tasks of +0.01[MATH]0.01 for a Gemini Apps Pro model trained on this data versus an equivalent model trained only on text data.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 2,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 3,
+          "end": 7,
+          "role": "V"
+        },
+        {
+          "start": 8,
+          "end": 258,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 185,
+          "end": 205,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        },
+        {
+          "start": 233,
+          "end": 258,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "participle_modifier"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-05",
+    "category": "long",
+    "sourceUrl": "https://ar5iv.labs.arxiv.org/html/2306.05284",
+    "text": "We remove annotators who did not listen to the full recordings, annotators who rate the reference recordings less than [MATH], and the rest of the recommended recipes from CrowdMOS (Ribeiro et al. 2011).",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 2,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 3,
+          "end": 9,
+          "role": "V"
+        },
+        {
+          "start": 10,
+          "end": 202,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 21,
+          "end": 62,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        },
+        {
+          "start": 75,
+          "end": 125,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "relative_clause",
+        "comparative",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-06",
+    "category": "long",
+    "sourceUrl": "https://ar5iv.labs.arxiv.org/html/2306.05284",
+    "text": "D-Adaptation is a novel automated way of selecting the overall learning rate of the Adam optimizer, i.e. its [MATH] parameter, dynamically throughout the training, introduced by Defazio and Mishchenko 2023.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 12,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 13,
+          "end": 15,
+          "role": "V"
+        },
+        {
+          "start": 16,
+          "end": 205,
+          "role": "C",
+          "bracket": "noun"
+        },
+        {
+          "start": 164,
+          "end": 205,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "participle_modifier"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-07",
+    "category": "long",
+    "sourceUrl": "https://ar5iv.labs.arxiv.org/html/2306.05284",
+    "text": "The EnCodec model used in this work was specifically designed to operate at a lower frame rate (50 Hz) than DAC (86 Hz), thus reducing by 40% the inference runtime for producing the same audio.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 35,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 18,
+          "end": 35,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 36,
+          "end": 61,
+          "role": "V"
+        },
+        {
+          "start": 40,
+          "end": 52,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 62,
+          "end": 119,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 121,
+          "end": 192,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "participle_modifier",
+        "long_subject",
+        "comparative",
+        "participial_construction"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-08",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2611.24931v1",
+    "text": "For endpoint signals [MATH] and a loss [MATH], the vector of derivatives of the relays’ payoffs with respect to their own signals is [MATH], where [MATH] is uniform within the first and last layers.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 45,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 47,
+          "end": 129,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 130,
+          "end": 132,
+          "role": "V"
+        },
+        {
+          "start": 133,
+          "end": 139,
+          "role": "C",
+          "bracket": "noun"
+        },
+        {
+          "start": 141,
+          "end": 197,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 3
+        }
+      ],
+      "constructs": [
+        "long_subject",
+        "relative_clause"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-09",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2611.24931v1",
+    "text": "Replacing the current profile by its canonical decoding changes the current raw payoff by at most [MATH], and replacing only the opponents in the deviating payoff changes that payoff by at most [MATH].",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 55,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 56,
+          "end": 63,
+          "role": "V"
+        },
+        {
+          "start": 64,
+          "end": 86,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 87,
+          "end": 104,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 110,
+          "end": 162,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 163,
+          "end": 170,
+          "role": "V"
+        },
+        {
+          "start": 171,
+          "end": 182,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 183,
+          "end": 200,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 5
+        }
+      ],
+      "constructs": [
+        "long_subject",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "long-10",
+    "category": "long",
+    "sourceUrl": "https://arxiv.org/html/2611.24931v1",
+    "text": "We insert relay firms between the sender and receiver to amplify the term proportional to [MATH] while keeping the receiver’s own payoff curvature and the influence in the opposite direction bounded.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 2,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 3,
+          "end": 9,
+          "role": "V"
+        },
+        {
+          "start": 10,
+          "end": 21,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 22,
+          "end": 53,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 54,
+          "end": 96,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 97,
+          "end": 198,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        }
+      ],
+      "constructs": [
+        "participial_construction",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  }
+]

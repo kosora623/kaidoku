@@ -205,4 +205,32 @@ describe('eval/metrics.ts', () => {
     expect(score.spanStrictF1).toBe(1);
     expect(score.spanExactMatch).toBe(true);
   });
+
+  it('採点では 1 語の S・O・C（We, [MATH] 等）の bracket 有無を正規化して一致扱いする', () => {
+    const sentence = 'We compute [MATH].';
+    const expected: Analysis = {
+      spans: [
+        { start: 0, end: 2, role: 'S', bracket: 'noun' },
+        { start: 3, end: 10, role: 'V' },
+        { start: 11, end: 17, role: 'O', bracket: 'noun' },
+      ],
+      constructs: [],
+      difficulty: 1,
+    };
+    const predicted: Analysis = {
+      spans: [
+        { start: 0, end: 2, role: 'S' },
+        { start: 3, end: 10, role: 'V' },
+        { start: 11, end: 17, role: 'O' },
+      ],
+      constructs: [],
+      difficulty: 1,
+    };
+
+    const score = scoreItem(expected, predicted, sentence);
+    expect(score.sExact).toBe(true);
+    expect(score.vExact).toBe(true);
+    expect(score.spanStrictF1).toBe(1);
+    expect(score.spanExactMatch).toBe(true);
+  });
 });

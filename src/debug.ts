@@ -214,15 +214,43 @@ function renderResult(sentence: string, result: AnalyzeResult): void {
   const sessionLabel = result.sessionCreated
     ? `土台作成: ${result.timing.sessionCreateMs} ms`
     : '土台作成: 0 ms（再利用）';
-  const noticeText = result.noticeMessage ?? result.fallbackReason;
+  const noticeParts: string[] = [];
+  if (result.noticeMessage ?? result.fallbackReason) {
+    noticeParts.push(result.noticeMessage ?? result.fallbackReason ?? '');
+  }
+  if (result.repaired && result.repaired.length > 0) {
+    noticeParts.push(
+      `軽い検証エラーを自動修復しました（${result.repaired.length}件）: ${result.repaired.join(' / ')}`,
+    );
+  }
+  const noticeText = noticeParts.join('\n');
+  const timingBreakdownPills =
+    result.provider === 'cloud'
+      ? [
+          {
+            text: `1段目: ${result.timing.stage1Ms !== undefined ? `${result.timing.stage1Ms} ms` : 'なし'}`,
+            cls: 'pill',
+          },
+          {
+            text: `2段目: ${result.timing.stage2Ms ?? result.timing.analyzeMs} ms`,
+            cls: 'pill',
+          },
+          { text: `再試行: ${result.timing.retryMs ?? 0} ms`, cls: 'pill' },
+          { text: `429・503等待機: ${result.timing.waitMs ?? 0} ms`, cls: 'pill' },
+        ]
+      : [{ text: `解析: ${result.timing.analyzeMs} ms`, cls: 'pill' }];
+
   const pills = [
     { text: result.modelName, cls: providerPillClass },
     { text: `難易度 ${result.analysis.difficulty}/5 (${stars})`, cls: 'pill' },
     ...(result.provider === 'nano' ? [{ text: sessionLabel, cls: 'pill' }] : []),
-    { text: `解析: ${result.timing.analyzeMs} ms`, cls: 'pill' },
+    ...timingBreakdownPills,
     { text: `合計: ${result.timing.totalMs} ms`, cls: 'pill' },
     ...(result.isExperimentalNano
       ? [{ text: '実験的なモード（精度低）', cls: 'pill pill-cloud' }]
+      : []),
+    ...(result.repaired && result.repaired.length > 0
+      ? [{ text: `自動修復 (${result.repaired.length}件)`, cls: 'pill pill-cloud' }]
       : []),
     ...(result.attempts > 1
       ? [{ text: `再試行で成功 (${result.attempts}回目)`, cls: 'pill pill-cloud' }]

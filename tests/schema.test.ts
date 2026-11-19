@@ -229,12 +229,12 @@ describe('validateAnalysis（文法整合チェック）', () => {
     }
   });
 
-  it('名詞節の主語（What the results suggest is ...）で S の中に V があっても主節 V が外にあれば許可する', () => {
+  it('名詞節の主語（What the results suggest is ...）で S の中に V があっても通過し、内側の V はコード側で取り除かれる', () => {
     const s = 'What the results suggest is clear.';
     const res = validateAnalysis(s, {
       spans: [
         { start: 0, end: 24, role: 'S', bracket: 'noun' }, // What the results suggest
-        { start: 17, end: 24, role: 'V' }, // suggest（S の内部の V）
+        { start: 17, end: 24, role: 'V' }, // suggest（S の内部の V → 除去される）
         { start: 25, end: 27, role: 'V' }, // is（主節の V）
         { start: 28, end: 33, role: 'C' }, // clear
       ],
@@ -245,6 +245,38 @@ describe('validateAnalysis（文法整合チェック）', () => {
     expect(findMainVerbSpans(res.spans)).toEqual([
       { start: 25, end: 27, role: 'V' },
     ]);
+    // 内側の V は取り除かれ、外側3スパンのみ残る
+    expect(res.spans).toHaveLength(3);
+  });
+
+  it('S・O・C・modifier の内側の S/V/O/C は取り除き、modifier の入れ子と modifies 参照は正しく残す', () => {
+    const s =
+      'Although recent work shows that models learn fast, the method we propose achieves higher accuracy.';
+    const res = validateAnalysis(s, {
+      spans: [
+        { start: 0, end: 49, role: 'modifier', bracket: 'adv', modifies: 5 }, // Although ... fast
+        { start: 9, end: 20, role: 'S', bracket: 'noun' }, // modifier 内の S → 除去
+        { start: 21, end: 26, role: 'V' }, // modifier 内の V → 除去
+        { start: 51, end: 72, role: 'S', bracket: 'noun' }, // the method we propose
+        { start: 62, end: 72, role: 'modifier', bracket: 'adj', modifies: 3 }, // we propose（modifier 入れ子は残す）
+        { start: 73, end: 81, role: 'V' }, // achieves
+        { start: 82, end: 97, role: 'O', bracket: 'noun' }, // higher accuracy
+      ],
+      constructs: ['omitted_relative'],
+      difficulty: 4,
+    });
+
+    expect(res.spans).toHaveLength(5);
+    expect(res.spans.map((sp) => sp.role)).toEqual([
+      'modifier',
+      'S',
+      'modifier',
+      'V',
+      'O',
+    ]);
+    // 削除に伴って modifies インデックスが正しく再マップされていること
+    expect(res.spans[0].modifies).toBe(3); // achieves
+    expect(res.spans[2].modifies).toBe(1); // the method we propose
   });
 
   it('形式主語 it（It is known that ...）で that 節 S の中に V があっても許可する', () => {
@@ -300,5 +332,25 @@ describe('validateAnalysis（文法整合チェック）', () => {
       expect(err).toBeInstanceOf(AnalysisValidationError);
       expect((err as AnalysisValidationError).code).toBe('MULTIPLE_MAIN_VERBS');
     }
+  });
+
+  it('1語の S・O・C（We, D-Adaptation, [MATH] 等）からは bracket: noun を自動で外し、2語以上の S・O・C と modifier は維持する', () => {
+    const s = 'D-Adaptation rapidly maps [MATH] into reliable updates.';
+    const res = validateAnalysis(s, {
+      spans: [
+        { start: 0, end: 12, role: 'S', bracket: 'noun' }, // D-Adaptation (1語 → bracket除去)
+        { start: 13, end: 20, role: 'modifier', bracket: 'adv', modifies: 2 }, // rapidly (modifier は維持)
+        { start: 21, end: 25, role: 'V' }, // maps
+        { start: 26, end: 32, role: 'O', bracket: 'noun' }, // [MATH] (1語 → bracket除去)
+        { start: 33, end: 54, role: 'modifier', bracket: 'adv', modifies: 2 }, // into reliable updates
+      ],
+      constructs: [],
+      difficulty: 2,
+    });
+
+    expect(res.spans[0].bracket).toBeUndefined();
+    expect(res.spans[1].bracket).toBe('adv');
+    expect(res.spans[3].bracket).toBeUndefined();
+    expect(res.spans[4].bracket).toBe('adv');
   });
 });

@@ -44,14 +44,25 @@ export function buildAnalysisSystemPrompt(): string {
   ].join('\n');
 }
 
+/** 25語以上の長文 2段階解析・1段目で抽出された 1 主節の骨格 */
+export interface ClauseSkeletonItem {
+  startWord: number;
+  endWord: number;
+  coordinatorWord?: number;
+  coordinatorText?: string;
+  subjects: Array<{ startWord: number; endWord: number; text: string }>;
+  mainVerbs: Array<{ startWord: number; endWord: number; text: string }>;
+}
+
 /**
  * 1文と単語分割結果からユーザープロンプトを構築する。
- * 2段階プロンプトの 2 段目では、1 段目で確定した主節動詞を前提として与える。
+ * 2段階解析の 2 段目では、1 段目で確定した主節骨格（S・V・等位節区切り）または主節動詞を前提として与える。
  */
 export function buildAnalysisUserPrompt(
   sentence: string,
   tokens: WordToken[],
   confirmedMainVerbs?: MainVerbWordSpan[],
+  clauseSkeleton?: ClauseSkeletonItem[],
 ): string {
   const wordList = tokens.map((t) => `${t.index}:${t.text}`).join(' ');
   const lines = [
@@ -59,7 +70,30 @@ export function buildAnalysisUserPrompt(
     `Words (0..${Math.max(0, tokens.length - 1)}): ${wordList}`,
   ];
 
-  if (confirmedMainVerbs && confirmedMainVerbs.length > 0) {
+  if (clauseSkeleton && clauseSkeleton.length > 0) {
+    lines.push('Premise — Verified main-clause skeleton (Stage 1):');
+    clauseSkeleton.forEach((cl, idx) => {
+      const coordNote =
+        cl.coordinatorWord !== undefined
+          ? `, joined by coordinating conjunction word ${cl.coordinatorWord} ("${cl.coordinatorText ?? ''}")`
+          : '';
+      const subjDesc =
+        cl.subjects.length > 0
+          ? cl.subjects
+              .map((s) => `${s.startWord}..${s.endWord} ("${s.text}")`)
+              .join(', ')
+          : '(none)';
+      const verbDesc = cl.mainVerbs
+        .map((v) => `${v.startWord}..${v.endWord} ("${v.text}")`)
+        .join(', ');
+      lines.push(
+        `  - Main clause ${idx + 1} (words ${cl.startWord}..${cl.endWord}${coordNote}): S = ${subjDesc}; mainVerbs = ${verbDesc}`,
+      );
+    });
+    lines.push(
+      'Follow these main clause boundaries, subjects (S), and mainVerbs (do NOT wrap a coordinating conjunction like ", so" / ", but" / ", and" into a modifier spanning across main clauses). Now add all O, C, nested modifiers (( ), < >, [ ]), constructs, and difficulty.',
+    );
+  } else if (confirmedMainVerbs && confirmedMainVerbs.length > 0) {
     const verbDesc = confirmedMainVerbs
       .map((v) => `word ${v.startWord}..${v.endWord} ("${v.text}")`)
       .join(', ');
@@ -70,6 +104,94 @@ export function buildAnalysisUserPrompt(
 
   lines.push('Return the JSON analysis.');
   return lines.join('\n');
+}
+
+/**
+ * 25語以上の長文向け 2 段階クラウド解析・1 段目用システムプロンプト
+ * （主節の S と V、等位接続詞でつながる節の区切りだけを出力させる）
+ */
+export function buildClauseSkeletonSystemPrompt(): string {
+  return [
+    'You are an English clause-skeleton analyzer for long academic sentences.',
+    'Identify ONLY the top-level main clause(s), the coordinating conjunctions joining them, and each main clause\'s Subject(s) (S) and Main Verb(s) (V).',
+    'Output ONLY valid JSON matching {"clauses":[{"startWord", "endWord", "coordinatorWord"?, "subjects":[{"startWord","endWord"}], "mainVerbs":[{"startWord","endWord"}]}]}.',
+    '',
+    'Rules:',
+    '1. Split the sentence into top-level main clauses ONLY at coordinating conjunctions joining independent main clauses (", so", ", but", ", and", ", yet", ", or", ";").',
+    '2. CRITICAL — ", so" + demonstrative "that + noun" vs "so that":',
+    '   - ", so" meaning "therefore" starts a NEW main clause! If followed by "that <noun>" (e.g., ", so that approach achieves...", ", so that bound neither holds nor..."), word "so" is coordinatorWord, and "that <noun>" is the Subject (S) of the second main clause (NOT a purpose clause "so that").',
+    '   - Only treat "so that" as a subordinate purpose conjunction when "that" is followed by a full subject+modal/verb clause ("... so that the model can converge").',
+    '3. For each main clause, list its full Subject(s) (S) including any relative/appositive/participial modifiers attached to S (and for formal_it "It ... that/to ...", list both "It" and the extraposed true subject).',
+    '4. For each main clause, list its Main Verb(s) (V):',
+    '   - Include passive "be + past participle" as one verb span, phrasal verbs as one span, and separated inverted verbs as the main verb only.',
+    '   - If a main clause has coordinated verbs ("neither V1 ... nor V2", "V1 ... and V2"), include each coordinated main verb in mainVerbs.',
+    '   - Do NOT list verbs inside subordinate clauses (Although/While/Whereas/Because/that/which/who) or participial modifiers.',
+  ].join('\n');
+}
+
+/**
+ * 25語以上の長文向け 1 段目のユーザープロンプトを構築する。
+ */
+export function buildClauseSkeletonUserPrompt(
+  sentence: string,
+  tokens: WordToken[],
+): string {
+  const wordList = tokens.map((t) => `${t.index}:${t.text}`).join(' ');
+  return [
+    `Sentence: ${sentence}`,
+    `Words (0..${Math.max(0, tokens.length - 1)}): ${wordList}`,
+    'Return ONLY the main-clause skeleton JSON.',
+  ].join('\n');
+}
+
+/**
+ * 25語以上の長文 1 段目用 Few-shot 例（全評価データセットと重複なし）
+ */
+export function buildClauseSkeletonFewShotTurns(): Array<{
+  role: 'user' | 'model';
+  parts: Array<{ text: string }>;
+}> {
+  return [
+    {
+      role: 'user',
+      parts: [
+        {
+          text: [
+            'Sentence: Existing bounds assume independent noise across layers, so that proof neither applies to correlated channels nor explains the empirical gap observed in deep networks.',
+            'Words (0..23): 0:Existing 1:bounds 2:assume 3:independent 4:noise 5:across 6:layers 7:so 8:that 9:proof 10:neither 11:applies 12:to 13:correlated 14:channels 15:nor 16:explains 17:the 18:empirical 19:gap 20:observed 21:in 22:deep 23:networks',
+            'Return ONLY the main-clause skeleton JSON.',
+          ].join('\n'),
+        },
+      ],
+    },
+    {
+      role: 'model',
+      parts: [
+        {
+          text: JSON.stringify({
+            clauses: [
+              {
+                startWord: 0,
+                endWord: 6,
+                subjects: [{ startWord: 0, endWord: 1 }],
+                mainVerbs: [{ startWord: 2, endWord: 2 }],
+              },
+              {
+                startWord: 8,
+                endWord: 23,
+                coordinatorWord: 7,
+                subjects: [{ startWord: 8, endWord: 9 }],
+                mainVerbs: [
+                  { startWord: 11, endWord: 11 },
+                  { startWord: 16, endWord: 16 },
+                ],
+              },
+            ],
+          }),
+        },
+      ],
+    },
+  ];
 }
 
 /**
