@@ -176,3 +176,48 @@ export interface PromptApiProbeResult {
   promptTestOutput?: string;
   error?: string;
 }
+
+/** 難文ハイライトの濃さ段階（0: マークなし / 1: 薄め / 2: 標準 / 3: 濃い・苦手構文強調） */
+export type MarkLevel = 0 | 1 | 2 | 3;
+
+/** 外部（Google Gemini API）データ送信の同意状態 */
+export interface CloudConsentState {
+  granted: boolean;
+  version: string;
+  grantedAt: string | null;
+}
+
+/** URL ごとにキャッシュする 1 文分の難文判定結果 */
+export interface CachedSentenceMark {
+  sentenceHash: string;
+  text: string;
+  constructs: ConstructId[];
+  difficulty: number;
+}
+
+/** Dexie に保存するページ単位の難文判定キャッシュ */
+export interface PageMarkCache {
+  /** 正規化 URL（ハッシュ・utm_* 等除去） */
+  url: string;
+  pageTitle: string;
+  /** 候補文全体のハッシュ（記事更新検知用） */
+  contentHash: string;
+  provider: 'cloud' | 'rule';
+  modelName: string;
+  batchCallCount: number;
+  marks: CachedSentenceMark[];
+  createdAt: string;
+  expiresAt: string;
+}
+
+/** Content Script へ返す 1 文分のハイライト指示 */
+export interface MarkedSentencePayload {
+  id: string;
+  sentenceHash: string;
+  text: string;
+  constructs: ConstructId[];
+  difficulty: number;
+  markLevel: MarkLevel;
+  weakConstructsHit: ConstructId[];
+}
+

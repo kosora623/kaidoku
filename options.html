@@ -28,8 +28,12 @@
         margin: 0 0 8px;
         font-size: 1.4rem;
       }
+      h2 {
+        margin: 0 0 8px;
+        font-size: 1.05rem;
+      }
       .subtitle {
-        margin: 0 0 24px;
+        margin: 0 0 20px;
         color: #475569;
         font-size: 0.92rem;
       }
@@ -47,19 +51,23 @@
         font-weight: 600;
         margin-bottom: 6px;
       }
-      input[type='password'] {
+      input[type='password'],
+      select {
         width: 100%;
         box-sizing: border-box;
         padding: 10px 12px;
         border: 1px solid #cbd5e1;
         border-radius: 8px;
         font-size: 0.95rem;
+      }
+      input[type='password'] {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
       .actions {
         display: flex;
         gap: 10px;
         margin-top: 14px;
+        flex-wrap: wrap;
       }
       button {
         padding: 9px 16px;
@@ -79,7 +87,7 @@
         border-color: #fecaca;
       }
       .status {
-        margin-top: 14px;
+        margin-top: 12px;
         font-size: 0.9rem;
         min-height: 1.4em;
       }
@@ -89,11 +97,19 @@
       .status.err {
         color: #b91c1c;
       }
+      hr {
+        border: none;
+        border-top: 1px solid #e2e8f0;
+        margin: 24px 0;
+      }
       .footer-link {
         margin-top: 24px;
         padding-top: 16px;
         border-top: 1px solid #e2e8f0;
         font-size: 0.9rem;
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
       }
       .footer-link a {
         color: #2563eb;
@@ -105,7 +121,7 @@
     <main>
       <h1>χ読（かいどく）設定</h1>
       <p class="subtitle">
-        χ読の構造解析・難文判定はクラウドの Gemini API（<code>gemini-3.1-flash-lite</code>）を既定で使用します。API キー未設定時は手元の Gemini Nano（精度が低い実験的なモード）で動作します。
+        χ読の構造解析・難文判定はクラウドの Gemini API（<code>gemini-3.1-flash-lite</code>）を既定で使用します。API キー未設定時はルールベース簡易マークおよび Gemini Nano（精度が低い実験的なモード）で動作します。
       </p>
 
       <div class="notice">
@@ -128,17 +144,33 @@
         <div id="status" class="status" role="status"></div>
       </form>
 
-      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0" />
+      <hr />
+
+      <section aria-label="外部データ送信の同意管理">
+        <h2>外部データ送信の同意・キャッシュ管理</h2>
+        <p id="consent-summary" class="subtitle" style="margin-bottom: 10px">
+          確認中...
+        </p>
+        <div class="actions">
+          <button type="button" id="open-consent-btn">同意画面を開く</button>
+          <button type="button" id="revoke-consent-btn" class="danger">
+            同意を撤回する
+          </button>
+          <button type="button" id="clear-cache-btn" class="danger">
+            ページ判定キャッシュを全消去
+          </button>
+        </div>
+        <div id="privacy-status" class="status" role="status"></div>
+      </section>
+
+      <hr />
 
       <section aria-label="Gemini Nano プロンプト方式設定">
         <label for="nano-prompt-mode">Gemini Nano プロンプト方式（保留中の実験設定・既定で無効）</label>
         <p class="subtitle" style="margin-bottom: 10px">
           API キー未設定時にのみ使われる Gemini Nano 向け設定です。2段階プロンプト実験は現在保留中のため、既定の「1段階」を推奨します。
         </p>
-        <select
-          id="nano-prompt-mode"
-          style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.92rem; width: 100%"
-        >
+        <select id="nano-prompt-mode">
           <option value="one-stage">1段階（既定）</option>
           <option value="two-stage">2段階（保留・実験用）</option>
         </select>
@@ -146,7 +178,8 @@
       </section>
 
       <div class="footer-link">
-        <a href="debug.html">デバッグ画面（debug.html）を開く →</a>
+        <a href="debug.html">デバッグ画面（debug.html）→</a>
+        <a href="eval.html">評価画面（eval.html）→</a>
       </div>
     </main>
     <script type="module" src="/src/options.ts"></script>

@@ -24,6 +24,7 @@ const RESULTS_DIR = path.join(ROOT_DIR, 'tests', 'eval', 'results');
 
 function parseArgs(argv) {
   let dataset = 'test';
+  let mode = 'single';
   let nanoPath = null;
   let skipCloud = false;
   let reuseCloud = false;
@@ -33,6 +34,8 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--dataset' && argv[i + 1]) {
       dataset = argv[++i] === 'dev' ? 'dev' : 'test';
+    } else if (arg === '--mode' && argv[i + 1]) {
+      mode = argv[++i] === 'batch' ? 'batch' : 'single';
     } else if (arg === '--nano' && argv[i + 1]) {
       nanoPath = path.resolve(argv[++i]);
     } else if (arg === '--skip-cloud') {
@@ -46,7 +49,7 @@ function parseArgs(argv) {
       }
     }
   }
-  return { dataset, nanoPath, skipCloud, reuseCloud, cloudDelayMs };
+  return { dataset, mode, nanoPath, skipCloud, reuseCloud, cloudDelayMs };
 }
 
 function sleep(ms) {
@@ -69,8 +72,9 @@ function extractRateLimitWaitMs(message) {
 async function loadSharedModules() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaidoku-eval-bundle-'));
   const entryCode = `
-    export { analyzeWithCloud, DEFAULT_CLOUD_MODEL } from './src/ai/cloud.ts';
+    export { analyzeWithCloud, classifyBatchConstructsWithCloud, DEFAULT_CLOUD_MODEL } from './src/ai/cloud.ts';
     export { AnalysisValidationError } from './src/ai/schema.ts';
+    export { calculateDifficultyAndMarkLevel } from './src/lang/en/difficulty.ts';
     export { scoreItem, aggregateEvalReport, formatComparisonMarkdown, formatErrorAnalysisMarkdown } from './src/eval/metrics.ts';
   `;
   const outFile = path.join(tmpDir, 'shared.mjs');
@@ -225,8 +229,172 @@ async function runCloudEval(
   );
 }
 
+function calcConstructPrf(expected, predicted) {
+  const expSet = new Set(expected);
+  const predSet = new Set(predicted);
+  if (expSet.size === 0 && predSet.size === 0) {
+    return { precision: 1, recall: 1, f1: 1, exact: true };
+  }
+  if (expSet.size === 0 || predSet.size === 0) {
+    return { precision: 0, recall: 0, f1: 0, exact: false };
+  }
+  let tp = 0;
+  for (const c of predSet) {
+    if (expSet.has(c)) tp += 1;
+  }
+  const precision = tp / predSet.size;
+  const recall = tp / expSet.size;
+  const f1 =
+    precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+  return {
+    precision,
+    recall,
+    f1,
+    exact: tp === expSet.size && tp === predSet.size,
+  };
+}
+
+/** --mode batch: 全文を 1 回のクラウド呼び出しで構文判定し、constructs 検出 F1 を計測する */
+async function runBatchEvalMode(dataset, datasetName, apiKey, shared) {
+  if (!apiKey) {
+    console.log(
+      '[Batch] .env.local に GEMINI_API_KEY が未設定のため、バッチ評価をスキップします。',
+    );
+    return;
+  }
+
+  console.log(
+    `[Batch] ${shared.DEFAULT_CLOUD_MODEL} で ${dataset.length} 文を 1 回のバッチ呼び出しで構文判定します...`,
+  );
+
+  const batchInput = dataset.map((entry, idx) => ({
+    id: idx,
+    text: entry.text,
+  }));
+
+  const res = await shared.classifyBatchConstructsWithCloud(batchInput, apiKey);
+
+  const items = dataset.map((entry, idx) => {
+    const aiConstructs = res.constructsById.get(idx) ?? [];
+    const computed = shared.calculateDifficultyAndMarkLevel(
+      entry.text,
+      aiConstructs,
+    );
+    const full = calcConstructPrf(entry.expected.constructs, computed.constructs);
+    const aiOnly = calcConstructPrf(
+      entry.expected.constructs.filter((c) => c !== 'long_subject'),
+      aiConstructs,
+    );
+
+    return {
+      id: entry.id,
+      category: entry.category,
+      text: entry.text,
+      expectedConstructs: entry.expected.constructs,
+      predictedAiConstructs: aiConstructs,
+      predictedConstructs: computed.constructs,
+      computedDifficulty: computed.difficulty,
+      computedMarkLevel: computed.markLevel,
+      precision: full.precision,
+      recall: full.recall,
+      f1: full.f1,
+      exact: full.exact,
+      aiOnlyF1: aiOnly.f1,
+    };
+  });
+
+  const avg = (arr) =>
+    arr.length === 0 ? 0 : arr.reduce((s, v) => s + v, 0) / arr.length;
+  const pct = (v) => `${(v * 100).toFixed(1)}%`;
+
+  const summary = {
+    mode: 'batch',
+    modelName: res.modelName,
+    datasetName,
+    executedAt: new Date().toISOString(),
+    totalCount: items.length,
+    batchCallCount: 1,
+    elapsedMs: res.elapsedMs,
+    msPerSentence: Math.round(res.elapsedMs / Math.max(1, items.length)),
+    constructPrecision: avg(items.map((i) => i.precision)),
+    constructRecall: avg(items.map((i) => i.recall)),
+    constructF1: avg(items.map((i) => i.f1)),
+    constructExactRate: avg(items.map((i) => (i.exact ? 1 : 0))),
+    aiOnlyConstructF1: avg(items.map((i) => i.aiOnlyF1)),
+    rawText: res.rawText,
+    items,
+  };
+
+  const outFile = path.join(
+    RESULTS_DIR,
+    datasetName === 'dev' ? 'batch-dev-results.json' : 'batch-results.json',
+  );
+  fs.writeFileSync(outFile, JSON.stringify(summary, null, 2) + '\n', 'utf8');
+  console.log(`[Batch] 結果を保存しました: ${path.relative(ROOT_DIR, outFile)}`);
+
+  // 保存済みの 1文ずつ解析結果があれば横並び比較する
+  const singleFile = path.join(
+    RESULTS_DIR,
+    datasetName === 'dev' ? 'cloud-dev-results.json' : 'cloud-results.json',
+  );
+  const singleReport = loadAndRescoreReport(
+    singleFile,
+    'cloud',
+    shared.DEFAULT_CLOUD_MODEL,
+    dataset,
+    datasetName,
+    shared,
+  );
+
+  const lines = [
+    '| 指標 | 一括バッチ判定（1回呼び出し）' +
+      (singleReport ? ' | 1文ずつ構造解析（30回呼び出し）' : '') +
+      ' |',
+    '| --- | ---' + (singleReport ? ' | ---' : '') + ' |',
+    `| 対象文数 | ${summary.totalCount} 文 (${datasetName})` +
+      (singleReport ? ` | ${singleReport.totalCount} 文 (${datasetName})` : '') +
+      ' |',
+    `| API 呼び出し回数 | 1 回` +
+      (singleReport ? ` | ${singleReport.totalCount} 回` : '') +
+      ' |',
+    `| 構文検出 Precision | ${pct(summary.constructPrecision)}` +
+      (singleReport ? ' | —' : '') +
+      ' |',
+    `| 構文検出 Recall | ${pct(summary.constructRecall)}` +
+      (singleReport ? ' | —' : '') +
+      ' |',
+    `| 構文検出 F1（全10構文・long_subjectコード判定込み） | **${pct(summary.constructF1)}**` +
+      (singleReport ? ` | **${pct(singleReport.constructF1)}**` : '') +
+      ' |',
+    `| 構文検出 F1（AI担当 9 構文のみ） | ${pct(summary.aiOnlyConstructF1)}` +
+      (singleReport ? ' | —' : '') +
+      ' |',
+    `| 構文完全一致率 | ${pct(summary.constructExactRate)}` +
+      (singleReport ? ` | ${pct(singleReport.constructExactRate)}` : '') +
+      ' |',
+    `| 合計所要時間 | ${summary.elapsedMs} ms（${summary.msPerSentence} ms/文）` +
+      (singleReport
+        ? ` | 中央値 ${singleReport.timingSummary.subsequentMedianMs} ms/文`
+        : '') +
+      ' |',
+  ];
+
+  console.log('\n=== バッチ構文判定 評価結果 ===\n');
+  console.log(lines.join('\n'));
+
+  const mismatches = items.filter((i) => !i.exact);
+  if (mismatches.length > 0) {
+    console.log(`\n不一致文 (${mismatches.length}/${items.length}):`);
+    for (const m of mismatches) {
+      console.log(
+        `  - ${m.id}: 正解=[${m.expectedConstructs.join(', ')}] / 予測=[${m.predictedConstructs.join(', ')}]`,
+      );
+    }
+  }
+}
+
 async function main() {
-  const { dataset: datasetName, nanoPath, skipCloud, reuseCloud, cloudDelayMs } =
+  const { dataset: datasetName, mode, nanoPath, skipCloud, reuseCloud, cloudDelayMs } =
     parseArgs(process.argv.slice(2));
 
   const datasetFile =
@@ -240,6 +408,12 @@ async function main() {
   const { mod: shared, cleanup } = await loadSharedModules();
 
   try {
+    if (mode === 'batch') {
+      const apiKey = (process.env.GEMINI_API_KEY ?? '').trim();
+      await runBatchEvalMode(dataset, datasetName, apiKey, shared);
+      return;
+    }
+
     const reports = [];
 
     // 1. Nano 評価結果（eval.html から書き出した JSON）を読み込む

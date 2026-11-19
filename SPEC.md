@@ -59,12 +59,27 @@ AIには「構造をJSONで返す」狭い仕事だけを任せます。日本�
 
 | 処理 | 担当 | 呼ぶタイミング |
 | --- | --- | --- |
-| 難文の判定 | ルールで候補を絞ってからクラウドの Gemini（Flash-Lite、1ページ分を1回でまとめて判定・URLごとにキャッシュ） | ボタンを押したとき（キャッシュがないURLのみ） |
+| 難文の判定 | 8語以上の文を候補とし、1回あたり最大80文・約12,000文字（1ページ最大3回、画面に見えている位置から読む順）でクラウドの Gemini（Flash-Lite）へまとめて送信して各文の `constructs` のみを判定。難易度・マーク濃さはコード側で計算し、URLごとにキャッシュ | ボタンを押したとき（キャッシュがないURLのみ） |
 | 構造の解析 | クラウドの Gemini（Flash-Lite、JSONスキーマで出力を固定）。APIキー未設定時のみ Gemini Nano（実験モード） | 文をタップしたとき |
 | 日本語の解説 | テンプレート（AIを使わない） | 解析結果が出たとき |
 | 日本語訳 | クラウドの Gemini（Flash-Lite）または Gemini Nano | 「訳を見る」を押したとき |
 | 単語の意味 | クラウドの Gemini（Flash-Lite）または Gemini Nano（文脈に合う意味を1つ） | 単語をタップしたとき |
 | 詳しい解説 | クラウドの Gemini（Flash系） | 「もっと詳しく」を押したときだけ |
+
+**難文マークの難易度・濃さの計算式（コード側で確定計算）**
+
+バッチ判定では AI に `difficulty` を出させず `constructs`（`long_subject` を除く 9 種）だけを返させ、`long_subject` のコード判定・文の長さ・ユーザーの苦手構文（`ConstructEntry` の `unsure` 記録がある構文）から以下で計算する。
+
+- `effectiveConstructs`：AI が返した `constructs` に、コード判定の `long_subject`（主節の S が `what / whether / that / how / why / to` 始まり・`-ing` 動名詞・6 語以上）を重複なく統合した配列
+- `lengthBonus`：単語数が 30 語以上なら `+2`、20 語以上なら `+1`、20 語未満なら `0`
+- `difficulty`（1〜5）：`clamp(1 + min(3, effectiveConstructs.length) + lengthBonus, 1, 5)`
+- `markLevel`（ハイライトの濃さ 0〜3）：
+  - `baseLevel`：
+    - `0`（マークなし）：`effectiveConstructs.length === 0` かつ 単語数 25 語未満
+    - `1`（薄い黄色）：`effectiveConstructs.length === 1` かつ 単語数 25 語未満、または `effectiveConstructs.length === 0` かつ 単語数 25 語以上
+    - `2`（標準の黄色）：`effectiveConstructs.length >= 2`、または（`effectiveConstructs.length >= 1` かつ 単語数 25 語以上）
+  - 苦手構文ブースト：`effectiveConstructs` にユーザーの苦手構文（`unsure` 1 件以上）が含まれる場合、`markLevel = min(3, max(1, baseLevel) + 1)`（含まれない場合は `markLevel = baseLevel`）
+- 描画方式：本文 DOM を `<mark>` 等で書き換えず、**CSS Custom Highlight API**（`CSS.highlights` に `kaidoku-mark-1` / `kaidoku-mark-2` / `kaidoku-mark-3` を登録）で色付けし、クリック位置から `document.caretPositionFromPoint` で文を特定する。arXiv HTML の文中数式（`.ltx_Math` 等）は送信テキストでは `[MATH]` に置換し、ハイライトの `Range` は元の DOM 範囲をそのまま保つ（`.ltx_equation`・コード・参考文献は対象外）。
 
 **APIキーとプライバシー**：APIキーは今動いているものとは別のプロジェクトで発行する。無料枠では送った内容が製品改善に使われる場合があるため、初回同意画面および設定画面にその旨を表示する。
 

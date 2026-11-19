@@ -17,7 +17,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "χ読（デバッグ画面を開く）"
+    "default_title": "χ読（このページの難文をマーク）"
   },
   "options_page": "options.html"
 }

@@ -14,11 +14,12 @@ export interface WordToken {
 
 /**
  * 英文を単語単位に分割し、各単語の 0 始まりインデックスと文字位置を返す。
- * アポストロフィ（don't）、ハイフン複合語（state-of-the-art）、小数・パーセント（98.5%）、
- * 通貨（$100）を1単語として扱い、周囲の句読点・括弧は除外する。
+ * arXiv HTML の文中数式プレースホルダ（[MATH]）、アポストロフィ（don't）、
+ * ハイフン複合語（state-of-the-art）、小数・パーセント（98.5%）、通貨（$100）を
+ * 1単語として扱い、周囲の句読点・括弧は除外する。
  */
 const WORD_TOKEN_REGEX =
-  /(?:[$€£¥](?=\d))?[\p{L}\p{N}]+(?:['’\-./][\p{L}\p{N}]+)*%?/gu;
+  /\[MATH\]|(?:[$€£¥](?=\d))?[\p{L}\p{N}]+(?:['’\-./][\p{L}\p{N}]+)*%?/gu;
 
 export function tokenizeWords(sentence: string): WordToken[] {
   const tokens: WordToken[] = [];

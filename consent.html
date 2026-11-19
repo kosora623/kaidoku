@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>χ読 — ご利用前の同意と初期設定</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #f4f6fb;
+        color: #0f172a;
+        line-height: 1.7;
+      }
+      main {
+        max-width: 720px;
+        margin: 32px auto;
+        padding: 30px 32px;
+        background: #ffffff;
+        border: 1px solid #dfe5f0;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 1.5rem;
+      }
+      .logo-chi {
+        color: #2563eb;
+        font-family: Georgia, serif;
+        font-style: italic;
+        font-size: 1.75rem;
+      }
+      .subtitle {
+        margin: 0 0 20px;
+        color: #475569;
+        font-size: 0.94rem;
+      }
+      .policy-box {
+        padding: 18px 20px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        margin-bottom: 18px;
+      }
+      .policy-box h2 {
+        margin: 0 0 10px;
+        font-size: 1.02rem;
+      }
+      .policy-box ul {
+        margin: 0;
+        padding-left: 20px;
+        font-size: 0.92rem;
+      }
+      .policy-box li {
+        margin-bottom: 8px;
+      }
+      .notice {
+        padding: 14px 16px;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        border-radius: 10px;
+        color: #92400e;
+        font-size: 0.89rem;
+        margin-bottom: 20px;
+      }
+      .api-section {
+        margin-bottom: 20px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+        font-size: 0.92rem;
+      }
+      input[type='password'] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 0.94rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .hint {
+        margin: 6px 0 0;
+        font-size: 0.82rem;
+        color: #64748b;
+      }
+      .agree-check {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin: 18px 0;
+        font-size: 0.93rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .agree-check input {
+        margin-top: 4px;
+        width: 17px;
+        height: 17px;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      button {
+        padding: 10px 20px;
+        border-radius: 9px;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        font-weight: 600;
+        font-size: 0.93rem;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #ffffff;
+      }
+      button.primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .status {
+        margin-top: 14px;
+        font-size: 0.9rem;
+        min-height: 1.4em;
+      }
+      .status.ok {
+        color: #15803d;
+      }
+      .status.err {
+        color: #b91c1c;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1><span class="logo-chi">χ</span>読（かいどく）ご利用前の同意</h1>
+      <p class="subtitle">
+        絡まった英文を、ほどいて読む。ご利用を開始する前に、外部へのテキスト送信についてご確認ください。
+      </p>
+
+      <section class="policy-box">
+        <h2>送信するデータと取り扱いについて</h2>
+        <ul>
+          <li>
+            <strong>難文マーク判定での送信</strong>：あなたが拡張機能のボタンを押したページに限り、本文から抽出した英文候補（8 語以上・最大 3 回分割）を Google Gemini API（<code>gemini-3.1-flash-lite</code>）へ送信して構文を判定します。ボタンを押していないページや、パスワード・入力フォーム・数式行・コード・参考文献は送信しません。
+          </li>
+          <li>
+            <strong>タップ時の構造解析での送信</strong>：ページ上でマークした文をタップしたときに、その 1 文を構造解析（S・V・O・C と括弧の図解生成）のために Google Gemini API へ送信します。
+          </li>
+          <li>
+            <strong>送信先</strong>：Google の Gemini API（<code>generativelanguage.googleapis.com</code>）のみに送信します。χ読独自の外部サーバーへは一切送信しません。
+          </li>
+          <li>
+            <strong>ローカル保存とキャッシュ</strong>：難文判定の結果は URL ごとに手元のブラウザ（IndexedDB）へキャッシュし、同じページで再度 API を呼ばないようにします。学習記録もすべて手元のブラウザ内にのみ保存します。
+          </li>
+          <li>
+            <strong>同意の撤回</strong>：設定画面（<code>options.html</code>）からいつでも同意の撤回、API キーの削除、キャッシュの全消去が可能です。
+          </li>
+        </ul>
+      </section>
+
+      <div class="notice">
+        <strong>無料枠の API キーに関するご注意：</strong><br />
+        Google AI Studio の無料枠で発行した API キーを使用する場合、送信した英文が Google の製品改善に使用される場合があります。専用の別プロジェクトで発行した API キーのご利用をおすすめします。
+      </div>
+
+      <div class="api-section">
+        <label for="api-key-input">Gemini API キー（任意：あとから設定画面でも登録できます）</label>
+        <input
+          id="api-key-input"
+          type="password"
+          autocomplete="off"
+          placeholder="AIza..."
+        />
+        <p class="hint">
+          ※ API キーを設定すると高精度なクラウド判定が有効になります。未設定のまま進んだ場合は、ルールベースの簡易マークおよび Gemini Nano（精度が低い実験的なモード）で動作します。
+        </p>
+      </div>
+
+      <label class="agree-check">
+        <input type="checkbox" id="consent-checkbox" />
+        <span>上記の内容（難文判定での本文候補の送信、およびマークした文をタップした際の 1 文の送信）を理解し、同意します。</span>
+      </label>
+
+      <div class="actions">
+        <button type="button" id="agree-btn" class="primary" disabled>
+          同意して利用を開始する
+        </button>
+        <button type="button" id="decline-btn">同意しない（閉じる）</button>
+      </div>
+
+      <div id="status" class="status" role="status"></div>
+    </main>
+    <script type="module" src="/src/consent.ts"></script>
+  </body>
+</html>
