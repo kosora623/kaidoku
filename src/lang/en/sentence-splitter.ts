@@ -16,8 +16,10 @@ export interface ExtractedDomSentence {
   sentenceHash: string;
   /** AI 送信・解析用の正規化テキスト（文中数式は [MATH]） */
   text: string;
-  /** CSS Custom Highlight API 用の元の DOM 範囲 */
+  /** CSS Custom Highlight API・Range.getClientRects() 用の元の DOM 範囲 */
   range: Range;
+  /** この文が属する本文ブロック要素（左余白ガターの位置揃えに使用） */
+  blockElement?: Element;
   /** 画面に見えている位置から読む順の優先番号 */
   viewportOrder: number;
 }
@@ -415,6 +417,7 @@ export function extractPageSentences(
   const rawItems: Array<{
     text: string;
     range: Range;
+    blockElement: Element;
     top: number;
     docOrder: number;
   }> = [];
@@ -449,6 +452,7 @@ export function extractPageSentences(
       rawItems.push({
         text: normalizedText,
         range,
+        blockElement: block,
         top,
         docOrder,
       });
@@ -482,6 +486,7 @@ export function extractPageSentences(
     sentenceHash: hashSentenceText(item.text),
     text: item.text,
     range: item.range,
+    blockElement: item.blockElement,
     viewportOrder: orderMap.get(item.docOrder) ?? idx,
   }));
 }

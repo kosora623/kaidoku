@@ -1,6 +1,11 @@
 import type { ClauseSkeletonItem } from './ai/prompt';
 import { tokenizeWords } from './ai/tokenizer';
 import type { WordMeaningResult } from './ai/word-meaning';
+import {
+  computeGutterBars,
+  type ComputedGutterBar,
+  type GutterSourceItem,
+} from './gutter';
 import { EN_CONSTRUCTS } from './lang/en/constructs';
 import {
   applyRelativePageMarks,
@@ -18,7 +23,6 @@ import type {
   ConstructId,
   MarkDensity,
   MarkedSentencePayload,
-  MarkLevel,
 } from './types';
 
 /** CSS Custom Highlight API の最小型宣言 */
@@ -42,46 +46,27 @@ interface MarkedItemRuntime {
   payload: MarkedSentencePayload;
 }
 
-const HIGHLIGHT_NAMES: Record<Exclude<MarkLevel, 0>, string> = {
-  1: 'kaidoku-mark-1',
-  2: 'kaidoku-mark-2',
-  3: 'kaidoku-mark-3',
-};
+const HOVER_HIGHLIGHT_NAME = 'kaidoku-hover';
 const ACTIVE_HIGHLIGHT_NAME = 'kaidoku-active';
 const STYLE_ELEMENT_ID = 'kaidoku-highlight-style';
 const SHADOW_HOST_ID = 'kaidoku-shadow-host';
 
 /**
- * 本文 DOM を書き換えずにマークするための ::highlight スタイルを注入する。
- * 明るい背景・暗い背景（黒背景に白文字など）の両方で文字の可読性を保つため、
- * 通常マークは背景色を付けず波線の下線（色と太さで 3 段階）で表現し、
- * タップして選択中の文にだけ半透明の背景色を付ける。
+ * 本文 DOM を書き換えずにホバー・選択中だけを装飾するための ::highlight スタイルを注入する。
+ * 通常マークは本文に常時の下線・背景色を付けず左余白の縦線（ガター）で表し、
+ * マウスホバー時のみ薄い点線下線＋半透明背景、選択中のみ半透明青背景を付ける。
  */
 function ensureHighlightStyles(): void {
   if (document.getElementById(STYLE_ELEMENT_ID)) return;
   const style = document.createElement('style');
   style.id = STYLE_ELEMENT_ID;
   style.textContent = `
-    ::highlight(${HIGHLIGHT_NAMES[1]}) {
-      background-color: transparent;
+    ::highlight(${HOVER_HIGHLIGHT_NAME}) {
+      background-color: rgba(139, 92, 246, 0.14);
       text-decoration-line: underline;
-      text-decoration-style: wavy;
-      text-decoration-color: rgba(217, 119, 6, 0.58);
+      text-decoration-style: dotted;
+      text-decoration-color: rgba(139, 92, 246, 0.68);
       text-decoration-thickness: 1.5px;
-    }
-    ::highlight(${HIGHLIGHT_NAMES[2]}) {
-      background-color: transparent;
-      text-decoration-line: underline;
-      text-decoration-style: wavy;
-      text-decoration-color: #f59e0b;
-      text-decoration-thickness: 2px;
-    }
-    ::highlight(${HIGHLIGHT_NAMES[3]}) {
-      background-color: transparent;
-      text-decoration-line: underline;
-      text-decoration-style: wavy;
-      text-decoration-color: #ef4444;
-      text-decoration-thickness: 2.5px;
     }
     ::highlight(${ACTIVE_HIGHLIGHT_NAME}) {
       background-color: rgba(59, 130, 246, 0.24);
@@ -102,38 +87,21 @@ function getCssHighlights(): HighlightRegistry | null {
 function clearAllHighlights(): void {
   const registry = getCssHighlights();
   if (!registry) return;
-  registry.delete(HIGHLIGHT_NAMES[1]);
-  registry.delete(HIGHLIGHT_NAMES[2]);
-  registry.delete(HIGHLIGHT_NAMES[3]);
+  registry.delete(HOVER_HIGHLIGHT_NAME);
   registry.delete(ACTIVE_HIGHLIGHT_NAME);
 }
 
-function applyHighlights(items: MarkedItemRuntime[]): void {
+function setHoverHighlight(range: Range | null): void {
   const registry = getCssHighlights();
   const HighlightCtor = window.Highlight;
   if (!registry || !HighlightCtor) return;
 
   ensureHighlightStyles();
-  clearAllHighlights();
-
-  const buckets: Record<Exclude<MarkLevel, 0>, Range[]> = {
-    1: [],
-    2: [],
-    3: [],
-  };
-
-  for (const item of items) {
-    const level = item.payload.markLevel;
-    if (level === 1 || level === 2 || level === 3) {
-      buckets[level].push(item.dom.range);
-    }
+  if (!range) {
+    registry.delete(HOVER_HIGHLIGHT_NAME);
+    return;
   }
-
-  for (const level of [1, 2, 3] as const) {
-    if (buckets[level].length > 0) {
-      registry.set(HIGHLIGHT_NAMES[level], new HighlightCtor(...buckets[level]));
-    }
-  }
+  registry.set(HOVER_HIGHLIGHT_NAME, new HighlightCtor(range));
 }
 
 function setActiveHighlight(range: Range | null): void {
@@ -141,6 +109,7 @@ function setActiveHighlight(range: Range | null): void {
   const HighlightCtor = window.Highlight;
   if (!registry || !HighlightCtor) return;
 
+  ensureHighlightStyles();
   if (!range) {
     registry.delete(ACTIVE_HIGHLIGHT_NAME);
     return;
@@ -300,6 +269,8 @@ function createShadowUi(callbacks: {
   onFeedback: (result: 'understood' | 'unsure') => void;
   onWordClick: (word: string) => void;
   onSaveWord: (meaning: WordMeaningResult) => void;
+  onGutterHover: (id: string | null) => void;
+  onGutterClick: (id: string) => void;
 }) {
   let host = document.getElementById(SHADOW_HOST_ID);
   if (host) {
@@ -655,7 +626,57 @@ function createShadowUi(callbacks: {
         color: #64748b;
         line-height: 1.45;
       }
+      .gutter-layer {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      .gutter-hit {
+        position: fixed;
+        width: 14px;
+        transform: translateX(-50%);
+        pointer-events: auto;
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: stretch;
+      }
+      .gutter-bar {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+        background: #8b5cf6;
+        transition: opacity 0.12s ease, transform 0.12s ease, background-color 0.12s ease;
+      }
+      .gutter-level-1 .gutter-bar {
+        width: 2.5px;
+        opacity: 0.36;
+      }
+      .gutter-level-2 .gutter-bar {
+        width: 4px;
+        opacity: 0.68;
+      }
+      .gutter-level-3 .gutter-bar {
+        width: 6px;
+        opacity: 0.96;
+      }
+      .gutter-hit.is-hover .gutter-bar,
+      .gutter-hit:hover .gutter-bar {
+        opacity: 1;
+        transform: scaleX(1.25);
+      }
+      .gutter-hit.is-active .gutter-bar {
+        background: #3b82f6;
+        opacity: 1;
+        transform: scaleX(1.3);
+      }
     </style>
+
+    <div class="gutter-layer" id="gutter-layer" aria-label="難文ガターマーク"></div>
 
     <div class="status-bar" id="status-bar">
       <span class="logo">χ読</span>
@@ -689,6 +710,7 @@ function createShadowUi(callbacks: {
     </div>
   `;
 
+  const gutterLayer = shadow.getElementById('gutter-layer') as HTMLDivElement;
   const statusText = shadow.getElementById('status-text') as HTMLSpanElement;
   const densityBtns = Array.from(
     shadow.querySelectorAll<HTMLButtonElement>('.density-btn'),
@@ -760,6 +782,46 @@ function createShadowUi(callbacks: {
 
   return {
     host,
+    renderGutters(
+      bars: ComputedGutterBar[],
+      activeId: string | null,
+      hoveredId: string | null,
+    ) {
+      gutterLayer.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      for (const bar of bars) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `gutter-hit gutter-level-${bar.markLevel}`;
+        if (bar.id === activeId) btn.classList.add('is-active');
+        if (bar.id === hoveredId) btn.classList.add('is-hover');
+        btn.dataset.sentenceId = bar.id;
+        btn.style.left = `${bar.left}px`;
+        btn.style.top = `${bar.top}px`;
+        btn.style.height = `${bar.height}px`;
+        btn.setAttribute('aria-label', '難文の構造解析を開く');
+
+        const pill = document.createElement('span');
+        pill.className = 'gutter-bar';
+        btn.appendChild(pill);
+
+        btn.addEventListener('mouseenter', () => callbacks.onGutterHover(bar.id));
+        btn.addEventListener('mouseleave', () => callbacks.onGutterHover(null));
+        btn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          callbacks.onGutterClick(bar.id);
+        });
+        frag.appendChild(btn);
+      }
+      gutterLayer.appendChild(frag);
+    },
+    syncGutterStates(activeId: string | null, hoveredId: string | null) {
+      for (const el of gutterLayer.querySelectorAll<HTMLElement>('.gutter-hit')) {
+        const id = el.dataset.sentenceId ?? null;
+        el.classList.toggle('is-active', Boolean(activeId && id === activeId));
+        el.classList.toggle('is-hover', Boolean(hoveredId && id === hoveredId));
+      }
+    },
     setStatus(text: string) {
       statusText.textContent = text;
     },
@@ -951,13 +1013,171 @@ function initKaidokuContent(): void {
   window.__kaidokuContentInitialized = true;
 
   let markedItems: MarkedItemRuntime[] = [];
+  let itemById = new Map<string, MarkedItemRuntime>();
   let totalPageSentences = 0;
   let currentDensity: MarkDensity = 'normal';
   let lastSourceLabel = '';
   let activeItem: MarkedItemRuntime | null = null;
+  let hoveredItem: MarkedItemRuntime | null = null;
   let activeAnalysis: AnalyzeResult | null = null;
   let currentAnalyzeRequestId: string | null = null;
   let ui: ReturnType<typeof createShadowUi> | null = null;
+  let gutterRafId: number | null = null;
+  let hoverRafId: number | null = null;
+  let lastPointerPos: { x: number; y: number } | null = null;
+  let mutationObserver: MutationObserver | null = null;
+  let resizeObserver: ResizeObserver | null = null;
+  let trackingAttached = false;
+
+  /** 現在マーク中の文の Range.getClientRects() から左ガター縦線を再描画する */
+  function renderGuttersNow(): void {
+    gutterRafId = null;
+    if (!ui) return;
+
+    const sources: GutterSourceItem[] = [];
+    for (const item of markedItems) {
+      const level = item.payload.markLevel;
+      if (level !== 1 && level !== 2 && level !== 3) continue;
+      try {
+        const clientRects = Array.from(item.dom.range.getClientRects());
+        if (clientRects.length === 0) continue;
+        const blockRect = item.dom.blockElement?.getBoundingClientRect();
+        sources.push({
+          id: item.payload.id,
+          markLevel: level,
+          rects: clientRects,
+          blockLeft:
+            blockRect && blockRect.width > 0 ? blockRect.left : undefined,
+        });
+      } catch {
+        // DOM 変化で一時的に無効になった Range はスキップ
+      }
+    }
+
+    const bars = computeGutterBars(sources, {
+      viewportHeight: window.innerHeight,
+    });
+    ui.renderGutters(
+      bars,
+      activeItem?.payload.id ?? null,
+      hoveredItem?.payload.id ?? null,
+    );
+  }
+
+  function scheduleGutterRender(): void {
+    if (gutterRafId !== null) return;
+    gutterRafId = window.requestAnimationFrame(renderGuttersNow);
+  }
+
+  function updateHoveredItem(next: MarkedItemRuntime | null): void {
+    if (hoveredItem === next) return;
+    hoveredItem = next;
+    // 選択中の文にホバーが重なる場合は選択中表示を優先しつつガターだけ同期する
+    if (next && next !== activeItem) {
+      setHoverHighlight(next.dom.range);
+    } else {
+      setHoverHighlight(null);
+    }
+    ui?.syncGutterStates(
+      activeItem?.payload.id ?? null,
+      hoveredItem?.payload.id ?? null,
+    );
+  }
+
+  /** スクロール・リサイズ・本文 DOM 変化に追従するリスナ群を接続する */
+  function attachLayoutTrackers(): void {
+    if (trackingAttached) return;
+    trackingAttached = true;
+    window.addEventListener('scroll', scheduleGutterRender, {
+      passive: true,
+      capture: true,
+    });
+    window.addEventListener('resize', scheduleGutterRender, { passive: true });
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => scheduleGutterRender());
+      resizeObserver.observe(document.documentElement);
+    }
+    if (typeof MutationObserver !== 'undefined' && document.body) {
+      mutationObserver = new MutationObserver((records) => {
+        // 自身の Shadow Host や style 注入による変化は無視して無限ループを防ぐ
+        const relevant = records.some((rec) => {
+          const target = rec.target as Element | null;
+          if (!target) return false;
+          if (target.id === SHADOW_HOST_ID || target.id === STYLE_ELEMENT_ID) {
+            return false;
+          }
+          if (target.closest?.(`#${SHADOW_HOST_ID}`)) {
+            return false;
+          }
+          return true;
+        });
+        if (relevant) {
+          scheduleGutterRender();
+        }
+      });
+      mutationObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    }
+  }
+
+  function detachLayoutTrackers(): void {
+    if (!trackingAttached) return;
+    trackingAttached = false;
+    window.removeEventListener('scroll', scheduleGutterRender, true);
+    window.removeEventListener('resize', scheduleGutterRender);
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    mutationObserver?.disconnect();
+    mutationObserver = null;
+    if (gutterRafId !== null) {
+      window.cancelAnimationFrame(gutterRafId);
+      gutterRafId = null;
+    }
+    if (hoverRafId !== null) {
+      window.cancelAnimationFrame(hoverRafId);
+      hoverRafId = null;
+    }
+  }
+
+  /** 指定したマーク文の構造解析パネルを開く（本文クリック・縦線クリック共通） */
+  function openAnalysisForItem(hit: MarkedItemRuntime): void {
+    if (!ui) return;
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    currentAnalyzeRequestId = requestId;
+    activeItem = hit;
+    activeAnalysis = null;
+    if (hoveredItem === hit) {
+      setHoverHighlight(null);
+    }
+    setActiveHighlight(hit.dom.range);
+    ui.syncGutterStates(hit.payload.id, hoveredItem?.payload.id ?? null);
+    ui.showPanelLoading(hit.dom.text, countWords(hit.dom.text) >= 25);
+
+    void chrome.runtime
+      .sendMessage({
+        type: 'ANALYZE_SENTENCE',
+        sentence: hit.dom.text,
+        requestId,
+        preferredProvider: 'auto',
+      })
+      .then((res: { ok?: boolean; data?: AnalyzeResult; error?: string }) => {
+        if (currentAnalyzeRequestId !== requestId) return;
+        if (!res?.ok || !res.data) {
+          ui?.showPanelError(res?.error ?? '構文解析に失敗しました。');
+          return;
+        }
+        activeAnalysis = res.data;
+        ui?.showPanelResult(hit.dom.text, res.data);
+      })
+      .catch((err) => {
+        if (currentAnalyzeRequestId !== requestId) return;
+        ui?.showPanelError(err instanceof Error ? err.message : String(err));
+      });
+  }
 
   /** 手元の判定済みスコアに対して現在の密度（10% / 20% / 40%）を適用し、API なしで即時再描画する */
   function reapplyRelativeMarks(density: MarkDensity): void {
@@ -984,10 +1204,13 @@ function initKaidokuContent(): void {
       if (lvl > 0) markedCount += 1;
     }
 
-    applyHighlights(markedItems);
+    if (hoveredItem && hoveredItem.payload.markLevel <= 0) {
+      updateHoveredItem(null);
+    }
     if (activeItem) {
       setActiveHighlight(activeItem.dom.range);
     }
+    renderGuttersNow();
 
     const suffix = lastSourceLabel ? `（${lastSourceLabel}）` : '';
     ui?.setStatus(
@@ -1010,9 +1233,12 @@ function initKaidokuContent(): void {
           void chrome.runtime.sendMessage({ type: 'OPEN_REVIEW_PAGE' });
         },
         onClearMarks: () => {
+          detachLayoutTrackers();
           clearAllHighlights();
           markedItems = [];
+          itemById = new Map();
           activeItem = null;
+          hoveredItem = null;
           activeAnalysis = null;
           currentAnalyzeRequestId = null;
           ui?.destroy();
@@ -1023,7 +1249,17 @@ function initKaidokuContent(): void {
           activeItem = null;
           activeAnalysis = null;
           currentAnalyzeRequestId = null;
+          ui?.syncGutterStates(null, hoveredItem?.payload.id ?? null);
           ui?.hidePanel();
+        },
+        onGutterHover: (id) => {
+          updateHoveredItem(id ? (itemById.get(id) ?? null) : null);
+        },
+        onGutterClick: (id) => {
+          const hit = itemById.get(id);
+          if (hit) {
+            openAnalysisForItem(hit);
+          }
         },
         onWordClick: (word) => {
           if (!activeItem) return;
@@ -1195,10 +1431,13 @@ function initKaidokuContent(): void {
       totalPageSentences = data.totalSentenceCount ?? extracted.length;
       currentDensity = data.markDensity ?? 'normal';
       markedItems = [];
+      itemById = new Map();
       for (const payload of data.marks) {
         const dom = byId.get(payload.id);
         if (dom) {
-          markedItems.push({ dom, payload });
+          const runtimeItem = { dom, payload };
+          markedItems.push(runtimeItem);
+          itemById.set(payload.id, runtimeItem);
         }
       }
 
@@ -1208,6 +1447,7 @@ function initKaidokuContent(): void {
           ? `クラウド ${data.batchCallCount}回`
           : 'ルール簡易';
 
+      attachLayoutTrackers();
       reapplyRelativeMarks(currentDensity);
     } catch (err) {
       ui.setStatus(
@@ -1215,6 +1455,35 @@ function initKaidokuContent(): void {
       );
     }
   }
+
+  // 本文上にマウスを乗せたときだけ、対象文に薄い点線下線＋半透明背景を表示する
+  document.addEventListener(
+    'mousemove',
+    (event) => {
+      if (markedItems.length === 0 || !ui) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.id === SHADOW_HOST_ID || target?.closest?.(`#${SHADOW_HOST_ID}`)) {
+        return;
+      }
+      lastPointerPos = { x: event.clientX, y: event.clientY };
+      if (hoverRafId !== null) return;
+      hoverRafId = window.requestAnimationFrame(() => {
+        hoverRafId = null;
+        if (!lastPointerPos) return;
+        const hit = findMarkedItemAtPoint(
+          lastPointerPos.x,
+          lastPointerPos.y,
+          markedItems,
+        );
+        updateHoveredItem(hit);
+      });
+    },
+    { passive: true },
+  );
+
+  document.documentElement.addEventListener('mouseleave', () => {
+    updateHoveredItem(null);
+  });
 
   // ページクリック時に caretPositionFromPoint でマーク文を特定して 1 文構造解析を開く
   document.addEventListener('click', (event) => {
@@ -1230,33 +1499,7 @@ function initKaidokuContent(): void {
     const hit = findMarkedItemAtPoint(event.clientX, event.clientY, markedItems);
     if (!hit) return;
 
-    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    currentAnalyzeRequestId = requestId;
-    activeItem = hit;
-    activeAnalysis = null;
-    setActiveHighlight(hit.dom.range);
-    ui.showPanelLoading(hit.dom.text, countWords(hit.dom.text) >= 25);
-
-    void chrome.runtime
-      .sendMessage({
-        type: 'ANALYZE_SENTENCE',
-        sentence: hit.dom.text,
-        requestId,
-        preferredProvider: 'auto',
-      })
-      .then((res: { ok?: boolean; data?: AnalyzeResult; error?: string }) => {
-        if (currentAnalyzeRequestId !== requestId) return;
-        if (!res?.ok || !res.data) {
-          ui?.showPanelError(res?.error ?? '構文解析に失敗しました。');
-          return;
-        }
-        activeAnalysis = res.data;
-        ui?.showPanelResult(hit.dom.text, res.data);
-      })
-      .catch((err) => {
-        if (currentAnalyzeRequestId !== requestId) return;
-        ui?.showPanelError(err instanceof Error ? err.message : String(err));
-      });
+    openAnalysisForItem(hit);
   });
 
   chrome.runtime?.onMessage.addListener(
