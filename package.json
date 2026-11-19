@@ -1,0 +1,25 @@
+{
+  "name": "kaidoku",
+  "version": "0.1.0",
+  "private": true,
+  "description": "χ読（かいどく）— 絡まった英文を、ほどいて読む。Chrome拡張機能",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "eval": "node --env-file-if-exists=.env.local scripts/eval.mjs",
+    "eval:labels": "node scripts/eval-labels.mjs"
+  },
+  "dependencies": {
+    "dexie": "^4.0.11"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.4",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.3",
+    "vitest": "^3.1.1"
+  }
+}

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>χ読 設定</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #f8fafc;
+        color: #0f172a;
+        line-height: 1.6;
+      }
+      main {
+        max-width: 680px;
+        margin: 32px auto;
+        padding: 28px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.4rem;
+      }
+      .subtitle {
+        margin: 0 0 24px;
+        color: #475569;
+        font-size: 0.92rem;
+      }
+      .notice {
+        padding: 14px 16px;
+        margin-bottom: 20px;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        border-radius: 8px;
+        color: #92400e;
+        font-size: 0.9rem;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      input[type='password'] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      button {
+        padding: 9px 16px;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button.primary {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #ffffff;
+      }
+      button.danger {
+        color: #b91c1c;
+        border-color: #fecaca;
+      }
+      .status {
+        margin-top: 14px;
+        font-size: 0.9rem;
+        min-height: 1.4em;
+      }
+      .status.ok {
+        color: #15803d;
+      }
+      .status.err {
+        color: #b91c1c;
+      }
+      .footer-link {
+        margin-top: 24px;
+        padding-top: 16px;
+        border-top: 1px solid #e2e8f0;
+        font-size: 0.9rem;
+      }
+      .footer-link a {
+        color: #2563eb;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>χ読（かいどく）設定</h1>
+      <p class="subtitle">
+        χ読の構造解析・難文判定はクラウドの Gemini API（<code>gemini-3.1-flash-lite</code>）を既定で使用します。API キー未設定時は手元の Gemini Nano（精度が低い実験的なモード）で動作します。
+      </p>
+
+      <div class="notice">
+        <strong>無料枠の API キーに関するご注意：</strong><br />
+        Google AI Studio の無料枠で発行した API キーを使用する場合、送信した英文が Google の製品改善に使用される場合があります。専用の別プロジェクトで発行した API キーのご利用をおすすめします。
+      </div>
+
+      <form id="api-key-form">
+        <label for="api-key-input">Gemini API キー</label>
+        <input
+          id="api-key-input"
+          type="password"
+          autocomplete="off"
+          placeholder="AIza..."
+        />
+        <div class="actions">
+          <button type="submit" class="primary">保存する</button>
+          <button type="button" id="clear-btn" class="danger">削除する</button>
+        </div>
+        <div id="status" class="status" role="status"></div>
+      </form>
+
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0" />
+
+      <section aria-label="Gemini Nano プロンプト方式設定">
+        <label for="nano-prompt-mode">Gemini Nano プロンプト方式（保留中の実験設定・既定で無効）</label>
+        <p class="subtitle" style="margin-bottom: 10px">
+          API キー未設定時にのみ使われる Gemini Nano 向け設定です。2段階プロンプト実験は現在保留中のため、既定の「1段階」を推奨します。
+        </p>
+        <select
+          id="nano-prompt-mode"
+          style="padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.92rem; width: 100%"
+        >
+          <option value="one-stage">1段階（既定）</option>
+          <option value="two-stage">2段階（保留・実験用）</option>
+        </select>
+        <div id="mode-status" class="status" role="status"></div>
+      </section>
+
+      <div class="footer-link">
+        <a href="debug.html">デバッグ画面（debug.html）を開く →</a>
+      </div>
+    </main>
+    <script type="module" src="/src/options.ts"></script>
+  </body>
+</html>

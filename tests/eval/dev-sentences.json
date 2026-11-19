@@ -1,0 +1,389 @@
+[
+  {
+    "id": "dev-01",
+    "category": "comparative",
+    "text": "The method that we propose achieves higher accuracy than existing approaches trained on larger datasets.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 26,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 11,
+          "end": 26,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 27,
+          "end": 35,
+          "role": "V"
+        },
+        {
+          "start": 36,
+          "end": 51,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 52,
+          "end": 103,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        },
+        {
+          "start": 77,
+          "end": 103,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 4
+        }
+      ],
+      "constructs": [
+        "relative_clause",
+        "comparative",
+        "participle_modifier"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "dev-02",
+    "category": "simple",
+    "text": "The server processes incoming requests quickly.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 10,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 11,
+          "end": 20,
+          "role": "V"
+        },
+        {
+          "start": 21,
+          "end": 38,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 39,
+          "end": 46,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        }
+      ],
+      "constructs": [],
+      "difficulty": 1
+    }
+  },
+  {
+    "id": "dev-03",
+    "category": "relative_clause",
+    "text": "The metric that the committee adopted measures structural fidelity.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 37,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 11,
+          "end": 37,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 38,
+          "end": 46,
+          "role": "V"
+        },
+        {
+          "start": 47,
+          "end": 66,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "relative_clause",
+        "long_subject"
+      ],
+      "difficulty": 2
+    }
+  },
+  {
+    "id": "dev-04",
+    "category": "omitted_relative",
+    "text": "The evidence we gathered supports an alternative explanation.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 24,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 13,
+          "end": 24,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 25,
+          "end": 33,
+          "role": "V"
+        },
+        {
+          "start": 34,
+          "end": 60,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "omitted_relative"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "dev-05",
+    "category": "participle_modifier",
+    "text": "Algorithms optimized for edge devices consume minimal battery power.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 37,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 11,
+          "end": 37,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 38,
+          "end": 45,
+          "role": "V"
+        },
+        {
+          "start": 46,
+          "end": 67,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "participle_modifier"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "dev-06",
+    "category": "long_subject",
+    "text": "What the reviewers noticed is a subtle flaw in the baseline setup.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 26,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 27,
+          "end": 29,
+          "role": "V"
+        },
+        {
+          "start": 30,
+          "end": 65,
+          "role": "C",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "long_subject"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "dev-07",
+    "category": "formal_it",
+    "text": "It is essential to verify output offsets against the original text.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 2,
+          "role": "S"
+        },
+        {
+          "start": 3,
+          "end": 5,
+          "role": "V"
+        },
+        {
+          "start": 6,
+          "end": 15,
+          "role": "C"
+        },
+        {
+          "start": 16,
+          "end": 66,
+          "role": "S",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "formal_it"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "dev-08",
+    "category": "inversion",
+    "text": "Only then did the team discover the hidden synchronization bug.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 9,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 14,
+          "end": 22,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 23,
+          "end": 31,
+          "role": "V"
+        },
+        {
+          "start": 32,
+          "end": 62,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "inversion"
+      ],
+      "difficulty": 4
+    }
+  },
+  {
+    "id": "dev-09",
+    "category": "apposition",
+    "text": "The idea that compact models can run locally changes software design.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 44,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 9,
+          "end": 44,
+          "role": "modifier",
+          "bracket": "noun",
+          "modifies": 0
+        },
+        {
+          "start": 45,
+          "end": 52,
+          "role": "V"
+        },
+        {
+          "start": 53,
+          "end": 68,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "apposition",
+        "long_subject"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "dev-10",
+    "category": "coordination",
+    "text": "The parser splits long paragraphs and marks complex clauses automatically.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 10,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 11,
+          "end": 17,
+          "role": "V"
+        },
+        {
+          "start": 18,
+          "end": 33,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 38,
+          "end": 43,
+          "role": "V"
+        },
+        {
+          "start": 44,
+          "end": 59,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 60,
+          "end": 73,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        }
+      ],
+      "constructs": [
+        "coordination"
+      ],
+      "difficulty": 2
+    }
+  }
+]

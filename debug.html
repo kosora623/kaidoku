@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>χ読 — 構文解析デバッグ</title>
+    <link rel="stylesheet" href="/src/debug.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="brand">
+          <h1><span class="logo-chi">χ</span>読 <span class="badge-stage">第1段階 デバッグ</span></h1>
+          <p class="tagline">絡まった英文を、ほどいて読む。— 1文の構造解析と英文解釈記法の確認画面</p>
+        </div>
+        <div class="header-links">
+          <a href="eval.html" class="link-btn">30文評価（eval.html）</a>
+          <a href="options.html" class="link-btn">設定（APIキー）</a>
+        </div>
+      </header>
+
+      <section class="card status-card" aria-label="AI 実行環境ステータス">
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">Service Worker (Prompt API)</span>
+            <span id="sw-probe-status" class="status-value">確認中...</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">拡張ページ (Prompt API)</span>
+            <span id="page-probe-status" class="status-value">確認中...</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">クラウド API キー</span>
+            <span id="cloud-key-status" class="status-value">確認中...</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">採用実行経路</span>
+            <span id="active-route-status" class="status-value">確認中...</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card input-card">
+        <div class="card-head">
+          <h2>英文の入力</h2>
+          <button type="button" id="load-sample-btn" class="btn-secondary">
+            SPEC.md の例文を入れる
+          </button>
+        </div>
+
+        <textarea
+          id="sentence-input"
+          rows="3"
+          placeholder="解析したい英文を1文入力してください..."
+        >The method that we propose achieves higher accuracy than existing approaches trained on larger datasets.</textarea>
+
+        <div class="controls">
+          <div class="control-group">
+            <label for="provider-select">AI モード</label>
+            <select id="provider-select">
+              <option value="auto" selected>自動（クラウド Gemini 優先 → 未設定時 Nano 実験モード）</option>
+              <option value="cloud">クラウド Gemini (Flash-Lite) のみ</option>
+              <option value="nano">Gemini Nano のみ（精度が低い実験的なモード）</option>
+            </select>
+          </div>
+          <button type="button" id="analyze-btn" class="btn-primary">
+            構文を解析する
+          </button>
+        </div>
+
+        <div id="error-box" class="error-box hidden" role="alert"></div>
+      </section>
+
+      <section id="result-section" class="results hidden">
+        <div class="card notation-card">
+          <div class="card-head">
+            <h2>英文解釈の表示</h2>
+            <div id="meta-pills" class="meta-pills"></div>
+          </div>
+
+          <div id="fallback-banner" class="fallback-banner hidden" role="status"></div>
+
+          <div class="legend" aria-label="記法の凡例">
+            <span class="legend-item"><span class="delim-sample noun">[ ]</span> 名詞のかたまり</span>
+            <span class="legend-item"><span class="delim-sample adj">( )</span> 形容詞的な修飾</span>
+            <span class="legend-item"><span class="delim-sample adv">&lt; &gt;</span> 副詞的な修飾</span>
+            <span class="legend-item"><span class="role-sample role-S">S</span> 主語</span>
+            <span class="legend-item"><span class="role-sample role-V">V</span> 動詞</span>
+            <span class="legend-item"><span class="role-sample role-O">O</span> 目的語</span>
+            <span class="legend-item"><span class="role-sample role-C">C</span> 補語</span>
+          </div>
+
+          <div id="notation-rich" class="notation-rich"></div>
+
+          <div class="sub-block">
+            <h3>テキスト記法（SPEC.md 形式）</h3>
+            <pre id="notation-text" class="notation-text"></pre>
+          </div>
+
+          <div class="sub-block">
+            <h3>検出された構文・解説テンプレート</h3>
+            <div id="constructs-list" class="constructs-list"></div>
+          </div>
+        </div>
+
+        <div class="card json-card">
+          <div class="card-head">
+            <h2>解析 JSON（文字位置変換・検証済み）</h2>
+            <span id="json-stats" class="json-stats"></span>
+          </div>
+          <pre id="json-output" class="json-output"></pre>
+
+          <details class="raw-details">
+            <summary>AI の生出力 JSON（単語番号ベース）を表示</summary>
+            <pre id="raw-json-output" class="json-output raw"></pre>
+          </details>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="/src/debug.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,1201 @@
+[
+  {
+    "id": "eval-01",
+    "category": "simple",
+    "text": "The experiment confirms our initial hypothesis.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 14,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 15,
+          "end": 23,
+          "role": "V"
+        },
+        {
+          "start": 24,
+          "end": 46,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [],
+      "difficulty": 1
+    }
+  },
+  {
+    "id": "eval-04",
+    "category": "relative_clause",
+    "text": "The architecture that we introduce improves translation quality substantially.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 34,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 17,
+          "end": 34,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 35,
+          "end": 43,
+          "role": "V"
+        },
+        {
+          "start": 44,
+          "end": 63,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 64,
+          "end": 77,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "relative_clause"
+      ],
+      "difficulty": 2
+    }
+  },
+  {
+    "id": "eval-05",
+    "category": "relative_clause",
+    "text": "Researchers who study neural networks often encounter vanishing gradients.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 37,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 12,
+          "end": 37,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 38,
+          "end": 43,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        },
+        {
+          "start": 44,
+          "end": 53,
+          "role": "V"
+        },
+        {
+          "start": 54,
+          "end": 73,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "relative_clause"
+      ],
+      "difficulty": 2
+    }
+  },
+  {
+    "id": "eval-07",
+    "category": "omitted_relative",
+    "text": "The features we extracted capture subtle temporal dependencies.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 25,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 13,
+          "end": 25,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 26,
+          "end": 33,
+          "role": "V"
+        },
+        {
+          "start": 34,
+          "end": 62,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "omitted_relative"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-08",
+    "category": "omitted_relative",
+    "text": "The latency users experience depends on network congestion.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 28,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 12,
+          "end": 28,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 29,
+          "end": 36,
+          "role": "V"
+        },
+        {
+          "start": 37,
+          "end": 58,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "omitted_relative"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-09",
+    "category": "omitted_relative",
+    "text": "The hyperparameters they selected yield stable convergence during training.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 33,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 20,
+          "end": 33,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 34,
+          "end": 39,
+          "role": "V"
+        },
+        {
+          "start": 40,
+          "end": 58,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 59,
+          "end": 74,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "omitted_relative"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-10",
+    "category": "participle_modifier",
+    "text": "Models quantized to four bits preserve strong reasoning performance.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 29,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 7,
+          "end": 29,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 30,
+          "end": 38,
+          "role": "V"
+        },
+        {
+          "start": 39,
+          "end": 67,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "participle_modifier"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-11",
+    "category": "participle_modifier",
+    "text": "Approaches relying on synthetic labels struggle with domain shift.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 38,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 11,
+          "end": 38,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 39,
+          "end": 47,
+          "role": "V"
+        },
+        {
+          "start": 48,
+          "end": 65,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "participle_modifier"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-12",
+    "category": "participle_modifier",
+    "text": "The system evaluated on noisy speech benchmarks outperforms conventional pipelines.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 47,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 11,
+          "end": 47,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 48,
+          "end": 59,
+          "role": "V"
+        },
+        {
+          "start": 60,
+          "end": 82,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "participle_modifier",
+        "long_subject"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-13",
+    "category": "long_subject",
+    "text": "What these ablation studies demonstrate is the importance of careful regularization.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 39,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 40,
+          "end": 42,
+          "role": "V"
+        },
+        {
+          "start": 43,
+          "end": 83,
+          "role": "C",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "long_subject"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-14",
+    "category": "long_subject",
+    "text": "Whether sparse attention scales to million-token contexts remains an open question.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 57,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 58,
+          "end": 65,
+          "role": "V"
+        },
+        {
+          "start": 66,
+          "end": 82,
+          "role": "C",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "long_subject"
+      ],
+      "difficulty": 4
+    }
+  },
+  {
+    "id": "eval-15",
+    "category": "long_subject",
+    "text": "Training large foundation models on uncurated web corpora introduces severe calibration errors.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 57,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 58,
+          "end": 68,
+          "role": "V"
+        },
+        {
+          "start": 69,
+          "end": 94,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "long_subject"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-16",
+    "category": "formal_it",
+    "text": "It is well established that deeper networks require residual connections.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 2,
+          "role": "S"
+        },
+        {
+          "start": 3,
+          "end": 22,
+          "role": "V"
+        },
+        {
+          "start": 6,
+          "end": 10,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 23,
+          "end": 72,
+          "role": "S",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "formal_it"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-17",
+    "category": "formal_it",
+    "text": "It remains difficult to guarantee factual consistency without external retrieval.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 2,
+          "role": "S"
+        },
+        {
+          "start": 3,
+          "end": 10,
+          "role": "V"
+        },
+        {
+          "start": 11,
+          "end": 20,
+          "role": "C"
+        },
+        {
+          "start": 21,
+          "end": 80,
+          "role": "S",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "formal_it"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-18",
+    "category": "formal_it",
+    "text": "It is noteworthy that smaller distilled models match larger teachers on narrow tasks.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 2,
+          "role": "S"
+        },
+        {
+          "start": 3,
+          "end": 5,
+          "role": "V"
+        },
+        {
+          "start": 6,
+          "end": 16,
+          "role": "C"
+        },
+        {
+          "start": 17,
+          "end": 84,
+          "role": "S",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "formal_it"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-19",
+    "category": "inversion",
+    "text": "Only after extensive pruning did the model meet our latency budget.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 28,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 33,
+          "end": 42,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 43,
+          "end": 47,
+          "role": "V"
+        },
+        {
+          "start": 48,
+          "end": 66,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "inversion"
+      ],
+      "difficulty": 4
+    }
+  },
+  {
+    "id": "eval-20",
+    "category": "inversion",
+    "text": "Rarely do heuristic rules generalize across heterogeneous hardware platforms.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 6,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 10,
+          "end": 25,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 26,
+          "end": 36,
+          "role": "V"
+        },
+        {
+          "start": 37,
+          "end": 76,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "inversion"
+      ],
+      "difficulty": 4
+    }
+  },
+  {
+    "id": "eval-21",
+    "category": "comparative",
+    "text": "Our decoder requires less memory than autoregressive models deployed on cloud servers.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 11,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 12,
+          "end": 20,
+          "role": "V"
+        },
+        {
+          "start": 21,
+          "end": 32,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 33,
+          "end": 85,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 60,
+          "end": 85,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 3
+        }
+      ],
+      "constructs": [
+        "comparative",
+        "participle_modifier"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-22",
+    "category": "comparative",
+    "text": "Sparse routing achieves higher throughput than dense layers trained under identical budgets.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 14,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 15,
+          "end": 23,
+          "role": "V"
+        },
+        {
+          "start": 24,
+          "end": 41,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 42,
+          "end": 91,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 60,
+          "end": 91,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 3
+        }
+      ],
+      "constructs": [
+        "comparative",
+        "participle_modifier"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-23",
+    "category": "comparative",
+    "text": "The lightweight classifier runs faster than standard baselines evaluated on mobile chips.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 26,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 27,
+          "end": 31,
+          "role": "V"
+        },
+        {
+          "start": 32,
+          "end": 88,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 1
+        },
+        {
+          "start": 63,
+          "end": 88,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "comparative",
+        "participle_modifier"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-24",
+    "category": "apposition",
+    "text": "The assumption that input tokens are independent breaks down in long documents.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 48,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 15,
+          "end": 48,
+          "role": "modifier",
+          "bracket": "noun",
+          "modifies": 0
+        },
+        {
+          "start": 49,
+          "end": 60,
+          "role": "V"
+        },
+        {
+          "start": 61,
+          "end": 78,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "apposition",
+        "long_subject"
+      ],
+      "difficulty": 4
+    }
+  },
+  {
+    "id": "eval-25",
+    "category": "apposition",
+    "text": "Our finding that early layers encode syntactic roles aligns with prior probing work.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 52,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 12,
+          "end": 52,
+          "role": "modifier",
+          "bracket": "noun",
+          "modifies": 0
+        },
+        {
+          "start": 53,
+          "end": 59,
+          "role": "V"
+        },
+        {
+          "start": 60,
+          "end": 83,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        }
+      ],
+      "constructs": [
+        "apposition",
+        "long_subject"
+      ],
+      "difficulty": 4
+    }
+  },
+  {
+    "id": "eval-26",
+    "category": "apposition",
+    "text": "The hypothesis that scaling laws plateau under data scarcity motivates our analysis.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 60,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 15,
+          "end": 60,
+          "role": "modifier",
+          "bracket": "noun",
+          "modifies": 0
+        },
+        {
+          "start": 61,
+          "end": 70,
+          "role": "V"
+        },
+        {
+          "start": 71,
+          "end": 83,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "apposition",
+        "long_subject"
+      ],
+      "difficulty": 4
+    }
+  },
+  {
+    "id": "eval-27",
+    "category": "participial_construction",
+    "text": "Given limited labeled samples, semi-supervised learning provides substantial gains.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 29,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 31,
+          "end": 55,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 56,
+          "end": 64,
+          "role": "V"
+        },
+        {
+          "start": 65,
+          "end": 82,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "participial_construction"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-28",
+    "category": "participial_construction",
+    "text": "Combining local caching with asynchronous prefetching, the engine eliminates disk bottlenecks.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 53,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 55,
+          "end": 65,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 66,
+          "end": 76,
+          "role": "V"
+        },
+        {
+          "start": 77,
+          "end": 93,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "participial_construction"
+      ],
+      "difficulty": 4
+    }
+  },
+  {
+    "id": "eval-29",
+    "category": "coordination",
+    "text": "The framework parses raw logs and detects anomalous latency spikes in real time.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 13,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 14,
+          "end": 20,
+          "role": "V"
+        },
+        {
+          "start": 21,
+          "end": 29,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 34,
+          "end": 41,
+          "role": "V"
+        },
+        {
+          "start": 42,
+          "end": 66,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 67,
+          "end": 79,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        }
+      ],
+      "constructs": [
+        "coordination"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-30",
+    "category": "coordination",
+    "text": "The authors collect diverse clinical records and validate their predictions against expert diagnoses.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 11,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 12,
+          "end": 19,
+          "role": "V"
+        },
+        {
+          "start": 20,
+          "end": 44,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 49,
+          "end": 57,
+          "role": "V"
+        },
+        {
+          "start": 58,
+          "end": 75,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 76,
+          "end": 100,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 3
+        }
+      ],
+      "constructs": [
+        "coordination"
+      ],
+      "difficulty": 3
+    }
+  },
+  {
+    "id": "eval-31",
+    "category": "complex",
+    "text": "Although recent work has shown that larger models generalize better, the gains we observe on tasks requiring multi-step reasoning remain limited.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 67,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 5
+        },
+        {
+          "start": 31,
+          "end": 67,
+          "role": "modifier",
+          "bracket": "noun",
+          "modifies": 0
+        },
+        {
+          "start": 69,
+          "end": 129,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 79,
+          "end": 129,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 2
+        },
+        {
+          "start": 99,
+          "end": 129,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 3
+        },
+        {
+          "start": 130,
+          "end": 136,
+          "role": "V"
+        },
+        {
+          "start": 137,
+          "end": 144,
+          "role": "C"
+        }
+      ],
+      "constructs": [
+        "omitted_relative",
+        "participle_modifier",
+        "long_subject"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "eval-32",
+    "category": "complex",
+    "text": "The results reported in Table 3, which were obtained without any task-specific tuning, suggest that the proposed objective is robust to label noise.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 86,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 12,
+          "end": 31,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 33,
+          "end": 85,
+          "role": "modifier",
+          "bracket": "adj",
+          "modifies": 0
+        },
+        {
+          "start": 87,
+          "end": 94,
+          "role": "V"
+        },
+        {
+          "start": 95,
+          "end": 147,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "participle_modifier",
+        "relative_clause",
+        "long_subject"
+      ],
+      "difficulty": 5
+    }
+  },
+  {
+    "id": "eval-33",
+    "category": "complex",
+    "text": "Not only does the proposed method reduce memory usage, but it also improves the stability of training on long sequences.",
+    "expected": {
+      "spans": [
+        {
+          "start": 0,
+          "end": 8,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 2
+        },
+        {
+          "start": 14,
+          "end": 33,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 34,
+          "end": 40,
+          "role": "V"
+        },
+        {
+          "start": 41,
+          "end": 53,
+          "role": "O",
+          "bracket": "noun"
+        },
+        {
+          "start": 59,
+          "end": 61,
+          "role": "S",
+          "bracket": "noun"
+        },
+        {
+          "start": 62,
+          "end": 66,
+          "role": "modifier",
+          "bracket": "adv",
+          "modifies": 6
+        },
+        {
+          "start": 67,
+          "end": 75,
+          "role": "V"
+        },
+        {
+          "start": 76,
+          "end": 119,
+          "role": "O",
+          "bracket": "noun"
+        }
+      ],
+      "constructs": [
+        "inversion",
+        "coordination"
+      ],
+      "difficulty": 5
+    }
+  }
+]

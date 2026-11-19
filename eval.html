@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>χ読 — Gemini Nano 精度・速度評価</title>
+    <link rel="stylesheet" href="/src/debug.css" />
+    <style>
+      .eval-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .eval-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .progress-wrap {
+        margin-top: 14px;
+      }
+      .progress-bar-bg {
+        width: 100%;
+        height: 10px;
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .progress-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: #2563eb;
+        transition: width 0.2s ease;
+      }
+      .progress-text {
+        margin-top: 6px;
+        font-size: 0.85rem;
+        color: #475569;
+      }
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .summary-box {
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+      }
+      .summary-label {
+        font-size: 0.75rem;
+        color: #526071;
+      }
+      .summary-val {
+        font-size: 1.08rem;
+        font-weight: 700;
+        margin-top: 2px;
+      }
+      table.eval-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+      }
+      table.eval-table th,
+      table.eval-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid #e2e8f0;
+        text-align: left;
+        vertical-align: top;
+      }
+      table.eval-table th {
+        background: #f8fafc;
+        font-weight: 700;
+        color: #334155;
+      }
+      .tag-ok {
+        color: #15803d;
+        font-weight: 700;
+      }
+      .tag-ng {
+        color: #b91c1c;
+        font-weight: 700;
+      }
+      .mono-small {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.76rem;
+        color: #475569;
+      }
+      .hint-box {
+        margin-top: 12px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1e3a8a;
+        font-size: 0.84rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="brand">
+          <h1><span class="logo-chi">χ</span>読 <span class="badge-stage">Nano 精度・速度評価</span></h1>
+          <p class="tagline">
+            Gemini Nano（Service Worker 経由）で評価セットを連続解析し、正解率と所要時間を計測します。
+          </p>
+        </div>
+        <div class="header-links">
+          <a href="debug.html" class="link-btn">単文デバッグ（debug.html）</a>
+          <a href="options.html" class="link-btn">設定（APIキー）</a>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="eval-toolbar">
+          <div class="control-group">
+            <label for="dataset-select">データセット</label>
+            <select id="dataset-select">
+              <option value="test" selected>本番テスト（sentences.json・30文）</option>
+              <option value="dev">プロンプト調整用（dev-sentences.json・10文）</option>
+            </select>
+            <label for="nano-mode-select">Nano 方式</label>
+            <select id="nano-mode-select">
+              <option value="one-stage" selected>1段階（既定）</option>
+              <option value="two-stage">2段階（実験：主節V先出し）</option>
+            </select>
+          </div>
+
+          <div class="eval-actions">
+            <button type="button" id="start-eval-btn" class="btn-primary">
+              Gemini Nano 評価を開始
+            </button>
+            <button type="button" id="compare-dev-btn" class="btn-secondary">
+              1段階 vs 2段階 比較実行（dev 10文）
+            </button>
+            <button type="button" id="stop-eval-btn" class="btn-secondary hidden">
+              中断する
+            </button>
+            <button type="button" id="download-json-btn" class="btn-secondary" disabled>
+              結果 JSON を書き出す
+            </button>
+          </div>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-bar-bg">
+            <div id="progress-fill" class="progress-bar-fill"></div>
+          </div>
+          <div id="progress-text" class="progress-text">
+            待機中（本番 30 文は既定の 1 段階方式ですぐ実行できます。開始時に土台セッションを初期化します）
+          </div>
+        </div>
+
+        <div class="hint-box">
+          <strong>本番 30 文（1段階）</strong>：完了後に「結果 JSON を書き出す」で
+          <code>tests/eval/results/nano-results.json</code> に保存して <code>npm run eval</code> を実行すると、クラウド（<code>gemini-3.1-flash-lite</code>）との比較表が出力されます。<br />
+          <strong>プロンプト調整（dev 10 文）</strong>：「1段階 vs 2段階 比較実行（dev 10文）」を押すと、<code>dev-sentences.json</code> の 10 文だけで両方式を連続計測し比較表を表示します（本番 30 文は調整に使用しません）。
+        </div>
+      </section>
+
+      <section id="summary-section" class="card hidden">
+        <div class="card-head">
+          <h2>集計結果・比較表</h2>
+        </div>
+        <div id="summary-grid" class="summary-grid"></div>
+        <pre id="markdown-output" class="notation-text"></pre>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>文ごとの解析ログ</h2>
+        </div>
+        <div style="overflow-x: auto">
+          <table class="eval-table">
+            <thead>
+              <tr>
+                <th>方式</th>
+                <th>ID</th>
+                <th>カテゴリ</th>
+                <th>状態 / 試行</th>
+                <th>S / V</th>
+                <th>Span F1</th>
+                <th>構文 F1</th>
+                <th>土台作成</th>
+                <th>解析時間</th>
+                <th>備考 / エラー</th>
+              </tr>
+            </thead>
+            <tbody id="results-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="/src/eval-page.ts"></script>
+  </body>
+</html>

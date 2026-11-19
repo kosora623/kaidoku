@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "χ読（かいどく）",
+  "version": "0.1.0",
+  "description": "絡まった英文を、ほどいて読む。英文の構造を解釈記法で可視化するChrome拡張",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "activeTab",
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "χ読（デバッグ画面を開く）"
+  },
+  "options_page": "options.html"
+}
