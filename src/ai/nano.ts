@@ -32,14 +32,21 @@ import {
 } from './tokenizer';
 
 /**
- * Prompt API に渡す入出力言語オプション。
+ * Prompt API に渡す入出力言語オプション（構造解析 JSON 用）。
  * availability() と create() で同一オプションを指定する（developer.chrome.com の推奨仕様）。
- * ※ 第1段階は JSON 構造出力のみのため expectedOutputs は en とする。
- *   後の段階で日本語訳や単語の意味を出すときに ja を追加予定。
  */
 export const NANO_MODEL_OPTIONS: LanguageModelAvailabilityOptions = {
   expectedInputs: [{ type: 'text', languages: ['en'] }],
   expectedOutputs: [{ type: 'text', languages: ['en'] }],
+};
+
+/**
+ * Prompt API に渡す入出力言語オプション（単語の意味・1文日本語訳などの日本語出力用）。
+ * availability() と create() で同一オプションを指定する（developer.chrome.com の推奨仕様）。
+ */
+export const NANO_JA_OUTPUT_OPTIONS: LanguageModelAvailabilityOptions = {
+  expectedInputs: [{ type: 'text', languages: ['en'] }],
+  expectedOutputs: [{ type: 'text', languages: ['ja'] }],
 };
 
 interface SessionCacheSlot {
@@ -60,12 +67,14 @@ const mainVerbSessionSlot: SessionCacheSlot = {
 };
 
 /** 現在の実行コンテキストで Prompt API (LanguageModel) が利用可能か判定する */
-export async function getNanoAvailability(): Promise<LanguageModelAvailability> {
+export async function getNanoAvailability(
+  options: LanguageModelAvailabilityOptions = NANO_MODEL_OPTIONS,
+): Promise<LanguageModelAvailability> {
   if (typeof globalThis.LanguageModel === 'undefined') {
     return 'unavailable';
   }
   try {
-    return await globalThis.LanguageModel.availability(NANO_MODEL_OPTIONS);
+    return await globalThis.LanguageModel.availability(options);
   } catch {
     return 'unavailable';
   }

@@ -5,7 +5,16 @@ import {
 import { probePromptApi, resetNanoBaseSession } from './ai/nano';
 import { analyzeSentence, getAiEnvironmentStatus } from './ai/router';
 import { AnalysisValidationError } from './ai/schema';
+import {
+  translateSentence,
+  type AcronymGlossaryEntry,
+} from './ai/translate';
 import { lookupWordMeaning } from './ai/word-meaning';
+import {
+  assertCloudConsentForCloudCall,
+  CLOUD_CONSENT_REQUIRED_ERROR,
+  shouldUseCachedPageMarks,
+} from './cloud-guard';
 import {
   clearAllPageMarkCaches,
   deletePageMarkCache,
@@ -52,6 +61,7 @@ export interface MarkPageResponseData {
   candidateCount: number;
   markedCount: number;
   markDensity: MarkDensity;
+  developerMode: boolean;
   notice?: string;
 }
 
@@ -91,6 +101,15 @@ export type BackgroundRequest =
       type: 'LOOKUP_WORD_MEANING';
       word: string;
       sentence: string;
+      isAcronym?: boolean;
+      acronymDefinition?: string | null;
+      allowAcronymGuess?: boolean;
+    }
+  | {
+      type: 'TRANSLATE_SENTENCE';
+      sentence: string;
+      acronymDefinitions?: AcronymGlossaryEntry[];
+      unresolvedAcronyms?: string[];
     }
   | {
       type: 'SAVE_WORD_ENTRY';
@@ -103,6 +122,12 @@ export type BackgroundRequest =
     }
   | {
       type: 'OPEN_REVIEW_PAGE';
+    }
+  | {
+      type: 'OPEN_OPTIONS_PAGE';
+    }
+  | {
+      type: 'OPEN_CONSENT_PAGE';
     };
 
 /** 指定タブへ content.js を動的注入し、難文マーク処理を起動する */
@@ -139,8 +164,9 @@ chrome.action?.onClicked.addListener((tab) => {
       }
     }
 
-    // Web ページ以外（chrome:// 等）で押された場合はデバッグ画面を開く
-    await chrome.tabs.create({ url: chrome.runtime.getURL('debug.html') });
+    // Web ページ以外（chrome:// 等）で押された場合は復習画面（開発者モード ON 時はデバッグ画面）を開く
+    const fallbackPage = settings.developerMode ? 'debug.html' : 'review.html';
+    await chrome.tabs.create({ url: chrome.runtime.getURL(fallbackPage) });
   })();
 });
 
@@ -150,9 +176,7 @@ async function handleMarkPageSentences(
 ): Promise<MarkPageResponseData> {
   const settings = await loadSettings();
   if (!settings.cloudConsent.granted) {
-    throw new Error(
-      '外部データ送信への同意が未完了です。同意画面（consent.html）から同意してください。',
-    );
+    throw new Error(CLOUD_CONSENT_REQUIRED_ERROR);
   }
 
   const weakCounts = await getWeakConstructCounts();
@@ -161,6 +185,7 @@ async function handleMarkPageSentences(
   const contentHash = hashCandidateList(selectedCandidates.map((c) => c.text));
   const totalSentenceCount = req.sentences.length;
   const markDensity = settings.markDensity;
+  const developerMode = settings.developerMode;
 
   if (selectedCandidates.length === 0) {
     return {
@@ -173,6 +198,7 @@ async function handleMarkPageSentences(
       candidateCount: 0,
       markedCount: 0,
       markDensity,
+      developerMode,
       notice: '8 語以上の英文候補が見つかりませんでした。',
     };
   }
@@ -203,12 +229,12 @@ async function handleMarkPageSentences(
     return { payloads, markedCount };
   };
 
-  // 1. URL キャッシュ照会（強制再判定でなければキャッシュを優先使用）
+  // 1. URL キャッシュ照会（強制再判定でなければキャッシュを優先使用。ただしルール簡易キャッシュは API キー登録後に自動昇格する）
   if (req.forceRefresh) {
     await deletePageMarkCache(req.pageUrl);
   } else {
     const cached = await getValidPageMarkCache(req.pageUrl, contentHash);
-    if (cached) {
+    if (shouldUseCachedPageMarks(cached, Boolean(settings.geminiApiKey))) {
       const byHash = new Map<string, CachedSentenceMark>();
       for (const m of cached.marks) {
         byHash.set(m.sentenceHash, m);
@@ -250,6 +276,7 @@ async function handleMarkPageSentences(
         candidateCount: selectedCandidates.length,
         markedCount,
         markDensity,
+        developerMode,
         ...(cached.provider === 'rule'
           ? {
               notice:
@@ -273,6 +300,10 @@ async function handleMarkPageSentences(
     modelName = DEFAULT_CLOUD_MODEL;
 
     for (const batch of batches) {
+      // クラウド送信直前に最新の同意状態を再確認する
+      const latestSettings = await loadSettings();
+      assertCloudConsentForCloudCall(latestSettings, true);
+
       const batchInput = batch.map((cand, idx) => ({
         id: idx,
         text: cand.text,
@@ -358,6 +389,7 @@ async function handleMarkPageSentences(
     candidateCount: selectedCandidates.length,
     markedCount,
     markDensity,
+    developerMode,
     ...(provider === 'rule'
       ? {
           notice:
@@ -479,7 +511,42 @@ chrome.runtime?.onMessage.addListener(
     }
 
     if (message.type === 'LOOKUP_WORD_MEANING') {
-      void lookupWordMeaning(message.word, message.sentence)
+      void (async () => {
+        const settings = await loadSettings();
+        const skipsAi = Boolean(
+          message.isAcronym &&
+            !message.acronymDefinition &&
+            !message.allowAcronymGuess,
+        );
+        const willUseCloud = !skipsAi && Boolean(settings.geminiApiKey);
+        assertCloudConsentForCloudCall(settings, willUseCloud);
+
+        return lookupWordMeaning(message.word, message.sentence, {
+          isAcronym: message.isAcronym,
+          acronymDefinition: message.acronymDefinition,
+          allowAcronymGuess: message.allowAcronymGuess,
+        });
+      })()
+        .then((data) => sendResponse({ ok: true, data }))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      return true;
+    }
+
+    if (message.type === 'TRANSLATE_SENTENCE') {
+      void (async () => {
+        const settings = await loadSettings();
+        assertCloudConsentForCloudCall(settings, Boolean(settings.geminiApiKey));
+
+        return translateSentence(message.sentence, {
+          acronymDefinitions: message.acronymDefinitions,
+          unresolvedAcronyms: message.unresolvedAcronyms,
+        });
+      })()
         .then((data) => sendResponse({ ok: true, data }))
         .catch((err) =>
           sendResponse({
@@ -531,6 +598,37 @@ chrome.runtime?.onMessage.addListener(
       return true;
     }
 
+    if (message.type === 'OPEN_OPTIONS_PAGE') {
+      void chrome.tabs
+        .create({ url: chrome.runtime.getURL('options.html') })
+        .then(() => sendResponse({ ok: true }))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      return true;
+    }
+
+    if (message.type === 'OPEN_CONSENT_PAGE') {
+      const tabId = sender?.tab?.id;
+      const consentUrl =
+        typeof tabId === 'number'
+          ? chrome.runtime.getURL(`consent.html?tabId=${tabId}`)
+          : chrome.runtime.getURL('consent.html');
+      void chrome.tabs
+        .create({ url: consentUrl })
+        .then(() => sendResponse({ ok: true }))
+        .catch((err) =>
+          sendResponse({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      return true;
+    }
+
     if (message.type === 'SET_MARK_DENSITY') {
       void saveMarkDensity(message.density)
         .then(() => sendResponse({ ok: true }))
@@ -545,29 +643,40 @@ chrome.runtime?.onMessage.addListener(
 
     if (message.type === 'ANALYZE_SENTENCE') {
       const tabId = sender?.tab?.id;
-      void analyzeSentence(message.sentence, {
-        preferredProvider: message.preferredProvider,
-        nanoPromptMode: message.nanoPromptMode,
-        allowNanoDownload: message.allowNanoDownload,
-        onStage1Complete:
-          typeof tabId === 'number'
-            ? (progress) => {
-                void chrome.tabs
-                  .sendMessage(tabId, {
-                    type: 'KAIDOKU_ANALYSIS_STAGE1',
-                    requestId: message.requestId,
-                    sentence: message.sentence,
-                    clauses: progress.clauses,
-                    stage1Ms: progress.stage1Ms,
-                    waitMs: progress.waitMs,
-                  })
-                  .catch(() => {
-                    // タブが閉じられた場合等は無視
-                  });
-              }
-            : undefined,
-      })
-        .then((result) => sendResponse({ ok: true, data: result }))
+      void (async () => {
+        const settings = await loadSettings();
+        const willUseCloud =
+          message.preferredProvider === 'cloud' ||
+          (message.preferredProvider !== 'nano' && Boolean(settings.geminiApiKey));
+        assertCloudConsentForCloudCall(settings, willUseCloud);
+
+        const result = await analyzeSentence(message.sentence, {
+          preferredProvider: message.preferredProvider,
+          nanoPromptMode: message.nanoPromptMode,
+          allowNanoDownload: message.allowNanoDownload,
+          onStage1Complete:
+            typeof tabId === 'number'
+              ? (progress) => {
+                  void chrome.tabs
+                    .sendMessage(tabId, {
+                      type: 'KAIDOKU_ANALYSIS_STAGE1',
+                      requestId: message.requestId,
+                      sentence: message.sentence,
+                      clauses: progress.clauses,
+                      stage1Ms: progress.stage1Ms,
+                      waitMs: progress.waitMs,
+                    })
+                    .catch(() => {
+                      // タブが閉じられた場合等は無視
+                    });
+                }
+              : undefined,
+        });
+        return { result, developerMode: settings.developerMode };
+      })()
+        .then(({ result, developerMode }) =>
+          sendResponse({ ok: true, data: result, developerMode }),
+        )
         .catch((err) => {
           const payload: Record<string, unknown> = {
             ok: false,

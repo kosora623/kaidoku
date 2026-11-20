@@ -115,6 +115,34 @@
         color: #2563eb;
         text-decoration: none;
       }
+      .hidden {
+        display: none !important;
+      }
+      .toggle-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        cursor: pointer;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .toggle-row input {
+        margin-top: 4px;
+        width: 17px;
+        height: 17px;
+      }
+      .confirm-box {
+        margin-top: 14px;
+        padding: 14px 16px;
+        border-radius: 10px;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        color: #92400e;
+        font-size: 0.9rem;
+      }
+      .confirm-box p {
+        margin: 0 0 10px;
+      }
     </style>
   </head>
   <body>
@@ -165,6 +193,42 @@
 
       <hr />
 
+      <section aria-label="学習データのエクスポート・インポート">
+        <h2>データのエクスポート・インポート</h2>
+        <p class="subtitle" style="margin-bottom: 10px">
+          記録した単語・構文・元の文・復習カードと設定（マーク量・開発者モードなど）を JSON ファイルでバックアップ・移行できます。<strong>Gemini API キーはエクスポートに含まれません。</strong>
+        </p>
+        <div class="actions">
+          <button type="button" id="export-json-btn" class="primary">
+            JSON をエクスポート
+          </button>
+          <button type="button" id="import-json-btn">
+            JSON をインポート
+          </button>
+          <input
+            type="file"
+            id="import-json-input"
+            accept="application/json,.json"
+            class="hidden"
+          />
+        </div>
+        <div id="import-confirm-box" class="confirm-box hidden" role="alert">
+          <p id="import-confirm-text"></p>
+          <div class="actions">
+            <button type="button" id="import-overwrite-btn" class="primary">
+              同じ ID を上書きして取り込む
+            </button>
+            <button type="button" id="import-skip-btn">
+              同じ ID はスキップして新規のみ取り込む
+            </button>
+            <button type="button" id="import-cancel-btn">キャンセル</button>
+          </div>
+        </div>
+        <div id="backup-status" class="status" role="status"></div>
+      </section>
+
+      <hr />
+
       <section aria-label="Gemini Nano プロンプト方式設定">
         <label for="nano-prompt-mode">Gemini Nano プロンプト方式（保留中の実験設定・既定で無効）</label>
         <p class="subtitle" style="margin-bottom: 10px">
@@ -177,10 +241,22 @@
         <div id="mode-status" class="status" role="status"></div>
       </section>
 
+      <section aria-label="開発者モード">
+        <h2>開発者モード</h2>
+        <label class="toggle-row" for="developer-mode-toggle">
+          <input type="checkbox" id="developer-mode-toggle" />
+          <span>開発者モードを有効にする</span>
+        </label>
+        <p class="subtitle" style="margin-bottom: 6px">
+          ON にすると、解析パネルの所要時間内訳（1段目・2段目・待機時間）と、デバッグ画面（<code>debug.html</code>）・評価画面（<code>eval.html</code>）へのリンクを表示します。通常は OFF をおすすめします。
+        </p>
+        <div id="dev-mode-status" class="status" role="status"></div>
+      </section>
+
       <div class="footer-link">
         <a href="review.html">復習画面（review.html）→</a>
-        <a href="debug.html">デバッグ画面（debug.html）→</a>
-        <a href="eval.html">評価画面（eval.html）→</a>
+        <a href="debug.html" class="dev-only-link hidden">デバッグ画面（debug.html）→</a>
+        <a href="eval.html" class="dev-only-link hidden">評価画面（eval.html）→</a>
       </div>
     </main>
     <script type="module" src="/src/options.ts"></script>

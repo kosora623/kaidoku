@@ -236,4 +236,27 @@ describe('notation', () => {
     expect(html).not.toContain('data-word="MATH"');
     expect(html).toContain('[MATH]');
   });
+
+  it('renderNotationHtml({ clickableWords: true }) が GPT-4 / 3D / ResNet50 など数字を含む略語を 1 語としてラップし、純粋な数字はラップしない', () => {
+    const sentence = 'In 2026, GPT-4 and ResNet50 improve 3D accuracy by 3.14 percent.';
+    const analysis: Analysis = {
+      spans: [
+        { start: 0, end: 7, role: 'modifier', bracket: 'adv', modifies: 2 },
+        { start: 9, end: 27, role: 'S', bracket: 'noun' },
+        { start: 28, end: 35, role: 'V' },
+        { start: 36, end: 47, role: 'O', bracket: 'noun' },
+        { start: 48, end: 63, role: 'modifier', bracket: 'adv', modifies: 2 },
+      ],
+      constructs: ['coordination'],
+      difficulty: 2,
+    };
+
+    const html = renderNotationHtml(sentence, analysis, { clickableWords: true });
+    expect(html).toContain('data-word="GPT-4"');
+    expect(html).toContain('data-word="ResNet50"');
+    expect(html).toContain('data-word="3D"');
+    expect(html).not.toContain('data-word="2026"');
+    expect(html).not.toContain('data-word="3"');
+    expect(html).not.toContain('data-word="14"');
+  });
 });

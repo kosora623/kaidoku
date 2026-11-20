@@ -1,11 +1,19 @@
 import type { ClauseSkeletonItem } from './ai/prompt';
 import { tokenizeWords } from './ai/tokenizer';
+import type { TranslateSentenceResult } from './ai/translate';
 import type { WordMeaningResult } from './ai/word-meaning';
 import {
   computeGutterBars,
   type ComputedGutterBar,
   type GutterSourceItem,
 } from './gutter';
+import {
+  extractPageBodyText,
+  findAcronymDefinition,
+  findAcronymsInSentence,
+  isAcronymWord,
+  normalizeAcronymBase,
+} from './lang/en/acronym';
 import { EN_CONSTRUCTS } from './lang/en/constructs';
 import {
   applyRelativePageMarks,
@@ -264,11 +272,15 @@ function createShadowUi(callbacks: {
   onRefresh: () => void;
   onChangeDensity: (density: MarkDensity) => void;
   onOpenReview: () => void;
+  onOpenOptions: () => void;
+  onOpenConsent: () => void;
   onClearMarks: () => void;
   onClosePanel: () => void;
   onFeedback: (result: 'understood' | 'unsure') => void;
   onWordClick: (word: string) => void;
+  onGuessAcronym: (word: string) => void;
   onSaveWord: (meaning: WordMeaningResult) => void;
+  onToggleTranslation: () => void;
   onGutterHover: (id: string | null) => void;
   onGutterClick: (id: string) => void;
 }) {
@@ -553,6 +565,101 @@ function createShadowUi(callbacks: {
         font-size: 11.5px;
         color: #0369a1;
       }
+      .word-acronym-def {
+        margin: 4px 0 6px;
+        padding: 5px 8px;
+        border-radius: 6px;
+        background: #e0f2fe;
+        border: 1px solid #7dd3fc;
+        color: #0c4a6e;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .word-acronym-missing {
+        margin: 4px 0 8px;
+        padding: 6px 9px;
+        border-radius: 6px;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        color: #92400e;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.45;
+      }
+      .word-guess-badge {
+        display: inline-block;
+        margin-right: 6px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        background: #fef3c7;
+        border: 1px solid #f59e0b;
+        color: #92400e;
+        font-size: 11px;
+        font-weight: 700;
+        vertical-align: middle;
+      }
+      .word-guess-btn {
+        border: 1px solid #d97706;
+        background: #fffbeb;
+        color: #92400e;
+        border-radius: 7px;
+        padding: 5px 11px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .word-guess-btn:hover:not(:disabled) {
+        background: #fef3c7;
+      }
+      .translation-section {
+        margin: 0 0 12px;
+      }
+      .translation-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        color: #1e293b;
+        border-radius: 8px;
+        padding: 5px 11px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .translation-toggle-btn:hover {
+        background: #eef2ff;
+        border-color: #a5b4fc;
+        color: #3730a3;
+      }
+      .translation-chevron {
+        font-size: 10px;
+        color: #64748b;
+      }
+      .translation-body {
+        margin-top: 8px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+      }
+      .translation-text {
+        margin: 0;
+        font-size: 13.5px;
+        line-height: 1.7;
+        color: #0f172a;
+      }
+      .translation-loading {
+        margin: 0;
+        font-size: 12.5px;
+        color: #475569;
+      }
+      .translation-meta {
+        margin: 6px 0 0;
+        font-size: 11.5px;
+        line-height: 1.45;
+        color: #475569;
+      }
       .density-group {
         display: inline-flex;
         align-items: center;
@@ -669,6 +776,37 @@ function createShadowUi(callbacks: {
         opacity: 1;
         transform: scaleX(1.25);
       }
+      .fb-ok:disabled,
+      .fb-unsure:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+      .status-notice {
+        position: fixed;
+        top: 56px;
+        right: 16px;
+        max-width: min(440px, calc(100vw - 32px));
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        color: #92400e;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .status-notice-text {
+        flex: 1;
+      }
+      .error-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+      }
       .gutter-hit.is-active .gutter-bar {
         background: #3b82f6;
         opacity: 1;
@@ -687,9 +825,12 @@ function createShadowUi(callbacks: {
         <button type="button" class="density-btn" data-density="high" title="スコア上位40%">多め</button>
       </div>
       <button type="button" class="bar-btn" id="review-btn">復習</button>
+      <button type="button" class="bar-btn" id="options-btn">設定</button>
       <button type="button" class="bar-btn" id="refresh-btn">再判定</button>
       <button type="button" class="bar-btn" id="clear-btn">解除</button>
     </div>
+
+    <div class="status-notice hidden" id="status-notice" role="status"></div>
 
     <div class="panel hidden" id="panel">
       <div class="panel-head">
@@ -712,10 +853,12 @@ function createShadowUi(callbacks: {
 
   const gutterLayer = shadow.getElementById('gutter-layer') as HTMLDivElement;
   const statusText = shadow.getElementById('status-text') as HTMLSpanElement;
+  const statusNotice = shadow.getElementById('status-notice') as HTMLDivElement;
   const densityBtns = Array.from(
     shadow.querySelectorAll<HTMLButtonElement>('.density-btn'),
   );
   const reviewBtn = shadow.getElementById('review-btn') as HTMLButtonElement;
+  const optionsBtn = shadow.getElementById('options-btn') as HTMLButtonElement;
   const refreshBtn = shadow.getElementById('refresh-btn') as HTMLButtonElement;
   const clearBtn = shadow.getElementById('clear-btn') as HTMLButtonElement;
   const panel = shadow.getElementById('panel') as HTMLDivElement;
@@ -729,6 +872,8 @@ function createShadowUi(callbacks: {
   const fbMsg = shadow.getElementById('fb-msg') as HTMLSpanElement;
   const timingLine = shadow.getElementById('timing-line') as HTMLDivElement;
 
+  let showDeveloperTiming = false;
+
   for (const btn of densityBtns) {
     btn.addEventListener('click', () => {
       const d = btn.dataset.density as MarkDensity | undefined;
@@ -738,11 +883,45 @@ function createShadowUi(callbacks: {
     });
   }
   reviewBtn.addEventListener('click', callbacks.onOpenReview);
+  optionsBtn.addEventListener('click', callbacks.onOpenOptions);
   refreshBtn.addEventListener('click', callbacks.onRefresh);
   clearBtn.addEventListener('click', callbacks.onClearMarks);
   closePanelBtn.addEventListener('click', callbacks.onClosePanel);
   btnUnderstood.addEventListener('click', () => callbacks.onFeedback('understood'));
   btnUnsure.addEventListener('click', () => callbacks.onFeedback('unsure'));
+
+  function buildErrorBox(message: string): HTMLDivElement {
+    const errDiv = document.createElement('div');
+    errDiv.className = 'error';
+    const textEl = document.createElement('div');
+    textEl.textContent = message;
+    errDiv.appendChild(textEl);
+
+    const needsConsent = /同意|consent\.html/.test(message);
+    const needsOptions = /API キー|options\.html|設定画面/.test(message);
+    if (needsConsent || needsOptions) {
+      const actions = document.createElement('div');
+      actions.className = 'error-actions';
+      if (needsConsent) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bar-btn';
+        btn.textContent = '同意画面を開く';
+        btn.addEventListener('click', callbacks.onOpenConsent);
+        actions.appendChild(btn);
+      }
+      if (needsOptions) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bar-btn';
+        btn.textContent = '設定画面を開く';
+        btn.addEventListener('click', callbacks.onOpenOptions);
+        actions.appendChild(btn);
+      }
+      errDiv.appendChild(actions);
+    }
+    return errDiv;
+  }
 
   // 解析パネル内の単語タップ（クリック／Enter・Space）をイベント委譲で処理する
   function triggerWordSelect(targetEl: HTMLElement): void {
@@ -756,9 +935,13 @@ function createShadowUi(callbacks: {
   }
 
   panelBody.addEventListener('click', (event) => {
-    const el = (event.target as HTMLElement | null)?.closest?.(
-      '.kaidoku-word',
-    ) as HTMLElement | null;
+    const target = event.target as HTMLElement | null;
+    const toggleBtn = target?.closest?.('#btn-toggle-translation');
+    if (toggleBtn) {
+      callbacks.onToggleTranslation();
+      return;
+    }
+    const el = target?.closest?.('.kaidoku-word') as HTMLElement | null;
     if (el) {
       triggerWordSelect(el);
     }
@@ -825,6 +1008,58 @@ function createShadowUi(callbacks: {
     setStatus(text: string) {
       statusText.textContent = text;
     },
+    setStatusNotice(message: string | null) {
+      if (!message) {
+        statusNotice.classList.add('hidden');
+        statusNotice.innerHTML = '';
+        return;
+      }
+      statusNotice.classList.remove('hidden');
+      statusNotice.innerHTML = '';
+
+      const textSpan = document.createElement('span');
+      textSpan.className = 'status-notice-text';
+      textSpan.textContent = message;
+      statusNotice.appendChild(textSpan);
+
+      if (/同意|consent\.html/.test(message)) {
+        const consentBtn = document.createElement('button');
+        consentBtn.type = 'button';
+        consentBtn.className = 'bar-btn';
+        consentBtn.textContent = '同意画面';
+        consentBtn.addEventListener('click', callbacks.onOpenConsent);
+        statusNotice.appendChild(consentBtn);
+      } else if (/API キー|設定画面/.test(message)) {
+        const optBtn = document.createElement('button');
+        optBtn.type = 'button';
+        optBtn.className = 'bar-btn';
+        optBtn.textContent = '設定を開く';
+        optBtn.addEventListener('click', callbacks.onOpenOptions);
+        statusNotice.appendChild(optBtn);
+      }
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'bar-btn';
+      closeBtn.textContent = '×';
+      closeBtn.setAttribute('aria-label', 'お知らせを閉じる');
+      closeBtn.addEventListener('click', () => {
+        statusNotice.classList.add('hidden');
+      });
+      statusNotice.appendChild(closeBtn);
+    },
+    setDeveloperMode(enabled: boolean) {
+      showDeveloperTiming = enabled;
+      if (!enabled) {
+        timingLine.classList.add('hidden');
+      } else if (timingLine.textContent?.trim()) {
+        timingLine.classList.remove('hidden');
+      }
+    },
+    setFeedbackBusy(busy: boolean) {
+      btnUnderstood.disabled = busy;
+      btnUnsure.disabled = busy;
+    },
     setActiveDensity(density: MarkDensity) {
       for (const btn of densityBtns) {
         btn.classList.toggle('is-active', btn.dataset.density === density);
@@ -858,7 +1093,7 @@ function createShadowUi(callbacks: {
         ${renderStage1SkeletonHtml(sentence, clauses)}
       `;
       timingLine.textContent = `進行中（1段目: ${stage1Ms} ms${waitNote} / 2段目: 解析中...）`;
-      timingLine.classList.remove('hidden');
+      timingLine.classList.toggle('hidden', !showDeveloperTiming);
     },
     showPanelResult(sentence: string, result: AnalyzeResult) {
       panel.classList.remove('hidden');
@@ -883,19 +1118,84 @@ function createShadowUi(callbacks: {
       panelBody.innerHTML = `
         <div class="notation-box">${renderNotationHtml(sentence, result.analysis, { clickableWords: true })}</div>
         <p class="word-hint">分からない単語をタップすると、この文脈での意味を表示して記録できます。</p>
+        <div class="translation-section" id="translation-section">
+          <button type="button" class="translation-toggle-btn" id="btn-toggle-translation" aria-expanded="false">
+            <span class="translation-chevron" aria-hidden="true">▶</span>
+            <span class="translation-btn-label">訳を見る</span>
+          </button>
+          <div class="translation-body hidden" id="translation-body"></div>
+        </div>
         <div>${constructsHtml}</div>
       `;
       feedbackRow.classList.remove('hidden');
+      btnUnderstood.disabled = false;
+      btnUnsure.disabled = false;
       fbMsg.textContent = result.modelName;
       timingLine.textContent = formatTimingBreakdown(result.timing);
-      timingLine.classList.remove('hidden');
+      timingLine.classList.toggle('hidden', !showDeveloperTiming);
     },
-    showWordLoading(word: string) {
+    setTranslationExpanded(expanded: boolean) {
+      const btn = panelBody.querySelector<HTMLButtonElement>('#btn-toggle-translation');
+      const body = panelBody.querySelector<HTMLDivElement>('#translation-body');
+      const chevron = btn?.querySelector<HTMLSpanElement>('.translation-chevron');
+      const label = btn?.querySelector<HTMLSpanElement>('.translation-btn-label');
+      if (btn) btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      if (chevron) chevron.textContent = expanded ? '▼' : '▶';
+      if (label) label.textContent = expanded ? '訳を隠す' : '訳を見る';
+      if (body) body.classList.toggle('hidden', !expanded);
+    },
+    showTranslationLoading() {
+      const body = panelBody.querySelector<HTMLDivElement>('#translation-body');
+      if (!body) return;
+      body.classList.remove('hidden');
+      body.innerHTML = '';
+      const p = document.createElement('p');
+      p.className = 'translation-loading';
+      p.textContent = '自然な日本語訳を生成しています...';
+      body.appendChild(p);
+    },
+    showTranslationResult(data: TranslateSentenceResult) {
+      const body = panelBody.querySelector<HTMLDivElement>('#translation-body');
+      if (!body) return;
+      body.classList.remove('hidden');
+      body.innerHTML = '';
+
+      const textEl = document.createElement('p');
+      textEl.className = 'translation-text';
+      textEl.textContent = data.translationJa;
+      body.appendChild(textEl);
+
+      if (data.appliedAcronyms.length > 0) {
+        const meta = document.createElement('p');
+        meta.className = 'translation-meta';
+        const defs = data.appliedAcronyms
+          .map((a) => `${a.acronym} = ${a.fullForm}`)
+          .join(' ／ ');
+        meta.textContent = `ページ内の定義を反映：${defs}`;
+        body.appendChild(meta);
+      }
+
+      if (data.unresolvedAcronyms.length > 0) {
+        const meta = document.createElement('p');
+        meta.className = 'translation-meta';
+        meta.textContent = `ページ内に定義が見つからない略語（${data.unresolvedAcronyms.join('・')}）は推測せずそのまま表記しています`;
+        body.appendChild(meta);
+      }
+    },
+    showTranslationError(message: string) {
+      const body = panelBody.querySelector<HTMLDivElement>('#translation-body');
+      if (!body) return;
+      body.classList.remove('hidden');
+      body.innerHTML = '';
+      body.appendChild(buildErrorBox(message));
+    },
+    showWordLoading(word: string, customMessage?: string) {
       wordCard.classList.remove('hidden');
       wordCard.innerHTML = '';
       const p = document.createElement('div');
       p.className = 'word-status';
-      p.textContent = `「${word}」の文脈に合う意味を調べています...`;
+      p.textContent =
+        customMessage ?? `「${word}」の文脈に合う意味を調べています...`;
       wordCard.appendChild(p);
     },
     showWordMeaning(meaning: WordMeaningResult) {
@@ -934,13 +1234,50 @@ function createShadowUi(callbacks: {
 
       head.appendChild(left);
       head.appendChild(closeWordBtn);
+      wordCard.appendChild(head);
 
-      const meaningEl = document.createElement('p');
-      meaningEl.className = 'word-meaning';
-      meaningEl.textContent = meaning.meaningJa;
+      // 略語の場合：ページ内定義の有無を明示する
+      if (meaning.isAcronym) {
+        if (meaning.acronymDefinition) {
+          const defEl = document.createElement('div');
+          defEl.className = 'word-acronym-def';
+          defEl.textContent = `ページ内の定義：${meaning.acronymDefinition}`;
+          wordCard.appendChild(defEl);
+        } else {
+          const missingEl = document.createElement('div');
+          missingEl.className = 'word-acronym-missing';
+          missingEl.textContent = 'ページ内に定義が見つかりません';
+          wordCard.appendChild(missingEl);
+        }
+      }
 
       const actions = document.createElement('div');
       actions.className = 'word-card-actions';
+
+      // ページ内定義が見つからない略語で、まだ AI 推測を実行していない場合
+      if (meaning.isAcronym && !meaning.acronymDefinition && !meaning.meaningJa) {
+        const guessBtn = document.createElement('button');
+        guessBtn.type = 'button';
+        guessBtn.className = 'word-guess-btn';
+        guessBtn.textContent = 'AI で意味を推測する（参考）';
+        guessBtn.addEventListener('click', () => {
+          guessBtn.disabled = true;
+          callbacks.onGuessAcronym(meaning.word);
+        });
+        actions.appendChild(guessBtn);
+        wordCard.appendChild(actions);
+        return;
+      }
+
+      const meaningEl = document.createElement('p');
+      meaningEl.className = 'word-meaning';
+      if (meaning.isGuessed) {
+        const guessBadge = document.createElement('span');
+        guessBadge.className = 'word-guess-badge';
+        guessBadge.textContent = '推測';
+        meaningEl.appendChild(guessBadge);
+      }
+      meaningEl.appendChild(document.createTextNode(meaning.meaningJa));
 
       const saveBtn = document.createElement('button');
       saveBtn.type = 'button';
@@ -960,7 +1297,6 @@ function createShadowUi(callbacks: {
       actions.appendChild(saveBtn);
       actions.appendChild(statusSpan);
 
-      wordCard.appendChild(head);
       wordCard.appendChild(meaningEl);
       wordCard.appendChild(actions);
     },
@@ -978,21 +1314,17 @@ function createShadowUi(callbacks: {
     showWordError(message: string) {
       wordCard.classList.remove('hidden');
       wordCard.innerHTML = '';
-      const errDiv = document.createElement('div');
-      errDiv.className = 'error';
-      errDiv.textContent = message;
-      wordCard.appendChild(errDiv);
+      wordCard.appendChild(buildErrorBox(message));
     },
     showPanelError(message: string) {
       panel.classList.remove('hidden');
       panelNotice.classList.add('hidden');
       feedbackRow.classList.add('hidden');
+      timingLine.classList.add('hidden');
+      timingLine.textContent = '';
       clearWordCard();
       panelBody.innerHTML = '';
-      const errDiv = document.createElement('div');
-      errDiv.className = 'error';
-      errDiv.textContent = message;
-      panelBody.appendChild(errDiv);
+      panelBody.appendChild(buildErrorBox(message));
     },
     setFeedbackMessage(msg: string) {
       fbMsg.textContent = msg;
@@ -1021,6 +1353,13 @@ function initKaidokuContent(): void {
   let hoveredItem: MarkedItemRuntime | null = null;
   let activeAnalysis: AnalyzeResult | null = null;
   let currentAnalyzeRequestId: string | null = null;
+  let currentWordRequestId: string | null = null;
+  let translationExpanded = false;
+  let activeTranslation: TranslateSentenceResult | null = null;
+  let currentTranslateRequestId: string | null = null;
+  let feedbackBusy = false;
+  let developerMode = false;
+  let cachedPageBodyText = '';
   let ui: ReturnType<typeof createShadowUi> | null = null;
   let gutterRafId: number | null = null;
   let hoverRafId: number | null = null;
@@ -1143,11 +1482,38 @@ function initKaidokuContent(): void {
     }
   }
 
+  function getPageBodyText(): string {
+    if (!cachedPageBodyText) {
+      cachedPageBodyText = extractPageBodyText(document);
+    }
+    return cachedPageBodyText;
+  }
+
+  function closeActivePanel(): void {
+    setActiveHighlight(null);
+    activeItem = null;
+    activeAnalysis = null;
+    currentAnalyzeRequestId = null;
+    currentWordRequestId = null;
+    currentTranslateRequestId = null;
+    translationExpanded = false;
+    activeTranslation = null;
+    feedbackBusy = false;
+    ui?.setFeedbackBusy(false);
+    ui?.syncGutterStates(null, hoveredItem?.payload.id ?? null);
+    ui?.hidePanel();
+  }
+
   /** 指定したマーク文の構造解析パネルを開く（本文クリック・縦線クリック共通） */
   function openAnalysisForItem(hit: MarkedItemRuntime): void {
     if (!ui) return;
     const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     currentAnalyzeRequestId = requestId;
+    currentWordRequestId = null;
+    currentTranslateRequestId = null;
+    translationExpanded = false;
+    activeTranslation = null;
+    feedbackBusy = false;
     activeItem = hit;
     activeAnalysis = null;
     if (hoveredItem === hit) {
@@ -1164,15 +1530,26 @@ function initKaidokuContent(): void {
         requestId,
         preferredProvider: 'auto',
       })
-      .then((res: { ok?: boolean; data?: AnalyzeResult; error?: string }) => {
-        if (currentAnalyzeRequestId !== requestId) return;
-        if (!res?.ok || !res.data) {
-          ui?.showPanelError(res?.error ?? '構文解析に失敗しました。');
-          return;
-        }
-        activeAnalysis = res.data;
-        ui?.showPanelResult(hit.dom.text, res.data);
-      })
+      .then(
+        (res: {
+          ok?: boolean;
+          data?: AnalyzeResult;
+          developerMode?: boolean;
+          error?: string;
+        }) => {
+          if (currentAnalyzeRequestId !== requestId) return;
+          if (typeof res?.developerMode === 'boolean') {
+            developerMode = res.developerMode;
+            ui?.setDeveloperMode(developerMode);
+          }
+          if (!res?.ok || !res.data) {
+            ui?.showPanelError(res?.error ?? '構文解析に失敗しました。');
+            return;
+          }
+          activeAnalysis = res.data;
+          ui?.showPanelResult(hit.dom.text, res.data);
+        },
+      )
       .catch((err) => {
         if (currentAnalyzeRequestId !== requestId) return;
         ui?.showPanelError(err instanceof Error ? err.message : String(err));
@@ -1218,6 +1595,142 @@ function initKaidokuContent(): void {
     );
   }
 
+  /** 単語（または略語）の意味照会を実行する */
+  function requestWordLookup(word: string, allowAcronymGuess = false): void {
+    if (!activeItem) return;
+    const targetSentence = activeItem.dom.text;
+    const acronym = isAcronymWord(word);
+    const pageText = acronym ? getPageBodyText() : '';
+    const acronymMatch = acronym ? findAcronymDefinition(word, pageText) : null;
+
+    // 略語でページ内に定義が見つからず、推測も要求されていない場合は AI を呼ばずに即表示する
+    if (acronym && !acronymMatch && !allowAcronymGuess) {
+      currentWordRequestId = null;
+      ui?.showWordMeaning({
+        word,
+        lemma: normalizeAcronymBase(word),
+        partOfSpeech: '略語',
+        meaningJa: '',
+        provider: 'none',
+        modelName: 'page-lookup',
+        fromCache: false,
+        isAcronym: true,
+        acronymDefinition: null,
+        isGuessed: false,
+      });
+      return;
+    }
+
+    const reqId = `word-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    currentWordRequestId = reqId;
+    ui?.showWordLoading(
+      word,
+      acronym && allowAcronymGuess
+        ? `「${word}」の意味を AI で推測しています（ページ内に定義なし）...`
+        : undefined,
+    );
+
+    void chrome.runtime
+      .sendMessage({
+        type: 'LOOKUP_WORD_MEANING',
+        word,
+        sentence: targetSentence,
+        ...(acronym
+          ? {
+              isAcronym: true,
+              acronymDefinition: acronymMatch?.fullForm ?? null,
+              allowAcronymGuess,
+            }
+          : {}),
+      })
+      .then(
+        (res: { ok?: boolean; data?: WordMeaningResult; error?: string }) => {
+          if (currentWordRequestId !== reqId) return;
+          if (!res?.ok || !res.data) {
+            ui?.showWordError(
+              res?.error ?? '単語の意味を取得できませんでした。',
+            );
+            return;
+          }
+          ui?.showWordMeaning(res.data);
+        },
+      )
+      .catch((err) => {
+        if (currentWordRequestId !== reqId) return;
+        ui?.showWordError(err instanceof Error ? err.message : String(err));
+      });
+  }
+
+  /** 「訳を見る」ボタンの開閉・日本語訳取得（ページ内略語定義を反映） */
+  function toggleSentenceTranslation(): void {
+    if (!activeItem || !ui) return;
+
+    if (translationExpanded) {
+      translationExpanded = false;
+      ui.setTranslationExpanded(false);
+      return;
+    }
+
+    translationExpanded = true;
+    ui.setTranslationExpanded(true);
+
+    if (activeTranslation) {
+      ui.showTranslationResult(activeTranslation);
+      return;
+    }
+
+    if (currentTranslateRequestId !== null) {
+      ui.showTranslationLoading();
+      return;
+    }
+
+    const targetSentence = activeItem.dom.text;
+    const reqId = `tr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    currentTranslateRequestId = reqId;
+    ui.showTranslationLoading();
+
+    const resolved = findAcronymsInSentence(targetSentence, getPageBodyText());
+    const acronymDefinitions = resolved.defined.map((d) => ({
+      acronym: d.acronym,
+      fullForm: d.fullForm,
+    }));
+
+    void chrome.runtime
+      .sendMessage({
+        type: 'TRANSLATE_SENTENCE',
+        sentence: targetSentence,
+        acronymDefinitions,
+        unresolvedAcronyms: resolved.undefinedAcronyms,
+      })
+      .then(
+        (res: {
+          ok?: boolean;
+          data?: TranslateSentenceResult;
+          error?: string;
+        }) => {
+          if (currentTranslateRequestId !== reqId) return;
+          currentTranslateRequestId = null;
+          if (!res?.ok || !res.data) {
+            ui?.showTranslationError(
+              res?.error ?? '日本語訳を取得できませんでした。',
+            );
+            return;
+          }
+          activeTranslation = res.data;
+          if (translationExpanded) {
+            ui?.showTranslationResult(res.data);
+          }
+        },
+      )
+      .catch((err) => {
+        if (currentTranslateRequestId !== reqId) return;
+        currentTranslateRequestId = null;
+        ui?.showTranslationError(
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+  }
+
   async function runMarking(forceRefresh = false): Promise<void> {
     if (!ui) {
       ui = createShadowUi({
@@ -1232,6 +1745,12 @@ function initKaidokuContent(): void {
         onOpenReview: () => {
           void chrome.runtime.sendMessage({ type: 'OPEN_REVIEW_PAGE' });
         },
+        onOpenOptions: () => {
+          void chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS_PAGE' });
+        },
+        onOpenConsent: () => {
+          void chrome.runtime.sendMessage({ type: 'OPEN_CONSENT_PAGE' });
+        },
         onClearMarks: () => {
           detachLayoutTrackers();
           clearAllHighlights();
@@ -1241,16 +1760,17 @@ function initKaidokuContent(): void {
           hoveredItem = null;
           activeAnalysis = null;
           currentAnalyzeRequestId = null;
+          currentWordRequestId = null;
+          currentTranslateRequestId = null;
+          translationExpanded = false;
+          activeTranslation = null;
+          feedbackBusy = false;
+          cachedPageBodyText = '';
           ui?.destroy();
           ui = null;
         },
         onClosePanel: () => {
-          setActiveHighlight(null);
-          activeItem = null;
-          activeAnalysis = null;
-          currentAnalyzeRequestId = null;
-          ui?.syncGutterStates(null, hoveredItem?.payload.id ?? null);
-          ui?.hidePanel();
+          closeActivePanel();
         },
         onGutterHover: (id) => {
           updateHoveredItem(id ? (itemById.get(id) ?? null) : null);
@@ -1262,39 +1782,26 @@ function initKaidokuContent(): void {
           }
         },
         onWordClick: (word) => {
-          if (!activeItem) return;
-          const targetSentence = activeItem.dom.text;
-          ui?.showWordLoading(word);
-          void chrome.runtime
-            .sendMessage({
-              type: 'LOOKUP_WORD_MEANING',
-              word,
-              sentence: targetSentence,
-            })
-            .then(
-              (res: { ok?: boolean; data?: WordMeaningResult; error?: string }) => {
-                if (!res?.ok || !res.data) {
-                  ui?.showWordError(
-                    res?.error ?? '単語の意味を取得できませんでした。',
-                  );
-                  return;
-                }
-                ui?.showWordMeaning(res.data);
-              },
-            )
-            .catch((err) => {
-              ui?.showWordError(
-                err instanceof Error ? err.message : String(err),
-              );
-            });
+          requestWordLookup(word, false);
+        },
+        onGuessAcronym: (word) => {
+          requestWordLookup(word, true);
+        },
+        onToggleTranslation: () => {
+          toggleSentenceTranslation();
         },
         onSaveWord: (meaning) => {
           if (!activeItem) return;
+          const savedMeaning = meaning.acronymDefinition
+            ? `${meaning.meaningJa}（${meaning.acronymDefinition}）`
+            : meaning.isGuessed
+              ? `${meaning.meaningJa}（推測）`
+              : meaning.meaningJa;
           void chrome.runtime
             .sendMessage({
               type: 'SAVE_WORD_ENTRY',
               word: meaning.word,
-              meaning: meaning.meaningJa,
+              meaning: savedMeaning,
               text: activeItem.dom.text,
               pageUrl: window.location.href,
               pageTitle: document.title,
@@ -1329,11 +1836,14 @@ function initKaidokuContent(): void {
             });
         },
         onFeedback: (result) => {
-          if (!activeItem || !activeAnalysis) return;
+          if (!activeItem || !activeAnalysis || feedbackBusy) return;
           const constructs: ConstructId[] =
             activeAnalysis.analysis.constructs.length > 0
               ? activeAnalysis.analysis.constructs
               : activeItem.payload.constructs;
+          feedbackBusy = true;
+          ui?.setFeedbackBusy(true);
+          ui?.setFeedbackMessage('記録しています...');
           void chrome.runtime
             .sendMessage({
               type: 'RECORD_CONSTRUCT_FEEDBACK',
@@ -1379,18 +1889,42 @@ function initKaidokuContent(): void {
                   reapplyRelativeMarks(currentDensity);
                 }
 
-                ui?.setFeedbackMessage(
-                  result === 'unsure'
-                    ? `苦手構文として記録し、復習カードを追加しました（マーク濃度に反映済み）`
-                    : '「分かった」として記録しました',
-                );
+                if (constructs.length === 0) {
+                  ui?.setFeedbackMessage(
+                    result === 'unsure'
+                      ? 'この文には記録対象の構文がありませんでした（単語をタップして記録できます）'
+                      : '「分かった」として記録しました',
+                  );
+                } else {
+                  ui?.setFeedbackMessage(
+                    result === 'unsure'
+                      ? '苦手構文として記録し、復習カードを追加しました（マーク濃度に反映済み）'
+                      : '「分かった」として記録しました',
+                  );
+                }
               },
-            );
+            )
+            .catch((err) => {
+              ui?.setFeedbackMessage(
+                `記録に失敗しました: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            })
+            .finally(() => {
+              feedbackBusy = false;
+              ui?.setFeedbackBusy(false);
+            });
         },
       });
     }
 
+    // 再判定時などに古い Range / パネル参照が残らないよう選択状態をリセットする
+    if (activeItem) {
+      closeActivePanel();
+    }
+    updateHoveredItem(null);
+    ui.setStatusNotice(null);
     ui.setStatus('本文の英文を抽出中...');
+    cachedPageBodyText = extractPageBodyText(document);
     const extracted = extractPageSentences(document, window);
     const byId = new Map(extracted.map((s) => [s.id, s]));
 
@@ -1417,17 +1951,22 @@ function initKaidokuContent(): void {
           totalSentenceCount: number;
           markedCount: number;
           markDensity: MarkDensity;
+          developerMode?: boolean;
           notice?: string;
         };
         error?: string;
       };
 
       if (!response?.ok || !response.data) {
-        ui.setStatus(`エラー: ${response?.error ?? '判定に失敗しました'}`);
+        const errMsg = response?.error ?? '判定に失敗しました';
+        ui.setStatus('エラーが発生しました');
+        ui.setStatusNotice(errMsg);
         return;
       }
 
       const data = response.data;
+      developerMode = Boolean(data.developerMode);
+      ui.setDeveloperMode(developerMode);
       totalPageSentences = data.totalSentenceCount ?? extracted.length;
       currentDensity = data.markDensity ?? 'normal';
       markedItems = [];
@@ -1449,10 +1988,11 @@ function initKaidokuContent(): void {
 
       attachLayoutTrackers();
       reapplyRelativeMarks(currentDensity);
+      ui.setStatusNotice(data.notice ?? null);
     } catch (err) {
-      ui.setStatus(
-        `エラー: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      const errMsg = err instanceof Error ? err.message : String(err);
+      ui.setStatus('エラーが発生しました');
+      ui.setStatusNotice(errMsg);
     }
   }
 
@@ -1500,6 +2040,22 @@ function initKaidokuContent(): void {
     if (!hit) return;
 
     openAnalysisForItem(hit);
+  });
+
+  // Esc キーで解析パネルを閉じる
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && activeItem && ui) {
+      closeActivePanel();
+    }
+  });
+
+  // 設定画面で開発者モードを切り替えた際、開いているページの計測表示にも即時反映する
+  chrome.storage?.onChanged?.addListener((changes, areaName) => {
+    if (areaName !== 'local') return;
+    if ('kaidoku_developer_mode' in changes) {
+      developerMode = changes.kaidoku_developer_mode?.newValue === true;
+      ui?.setDeveloperMode(developerMode);
+    }
   });
 
   chrome.runtime?.onMessage.addListener(

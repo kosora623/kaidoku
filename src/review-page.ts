@@ -13,6 +13,7 @@ import {
   sortDueReviewQueue,
   type ReviewRating,
 } from './review';
+import { loadSettings } from './settings';
 
 type FilterKind = 'all' | 'word' | 'construct';
 
@@ -33,6 +34,7 @@ const studyStage = document.getElementById('study-stage') as HTMLDivElement;
 
 const librarySearch = document.getElementById('library-search') as HTMLInputElement;
 const libraryList = document.getElementById('library-list') as HTMLDivElement;
+const devDebugLink = document.getElementById('dev-debug-link') as HTMLAnchorElement | null;
 
 let allItems: HydratedReviewCard[] = [];
 let studyFilter: FilterKind = 'all';
@@ -40,6 +42,7 @@ let libraryFilter: FilterKind = 'all';
 let studyQueue: HydratedReviewCard[] = [];
 let completedInSession = 0;
 let isAnswerRevealed = false;
+let isSubmittingAnswer = false;
 
 function escapeHtml(text: string): string {
   return text
@@ -332,23 +335,33 @@ async function handleAnswer(
   item: HydratedReviewCard,
   rating: ReviewRating,
 ): Promise<void> {
-  const updatedCard = await submitReviewAnswer(item.card.id, rating);
-
-  // キューの先頭を取り出し、「忘れた」のときは同じセッションの末尾に再出題する
-  studyQueue.shift();
-  if (rating === 'again') {
-    const updatedItem: HydratedReviewCard =
-      item.kind === 'word'
-        ? { ...item, card: updatedCard }
-        : { ...item, card: updatedCard };
-    studyQueue.push(updatedItem);
-  } else {
-    completedInSession += 1;
+  if (isSubmittingAnswer) return;
+  isSubmittingAnswer = true;
+  for (const btn of studyStage.querySelectorAll<HTMLButtonElement>('.rating-btn')) {
+    btn.disabled = true;
   }
 
-  isAnswerRevealed = false;
-  await refreshSummaryAndData(false);
-  renderStudyCard();
+  try {
+    const updatedCard = await submitReviewAnswer(item.card.id, rating);
+
+    // キューの先頭を取り出し、「忘れた」のときは同じセッションの末尾に再出題する
+    studyQueue.shift();
+    if (rating === 'again') {
+      const updatedItem: HydratedReviewCard =
+        item.kind === 'word'
+          ? { ...item, card: updatedCard }
+          : { ...item, card: updatedCard };
+      studyQueue.push(updatedItem);
+    } else {
+      completedInSession += 1;
+    }
+
+    isAnswerRevealed = false;
+    await refreshSummaryAndData(false);
+    renderStudyCard();
+  } finally {
+    isSubmittingAnswer = false;
+  }
 }
 
 function renderLibrary(): void {
@@ -501,4 +514,10 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-lib-filter
 includeUpcomingCheckbox.addEventListener('change', () => rebuildStudyQueue());
 librarySearch.addEventListener('input', () => renderLibrary());
 
+void (async () => {
+  const settings = await loadSettings();
+  if (devDebugLink) {
+    devDebugLink.classList.toggle('hidden', !settings.developerMode);
+  }
+})();
 void refreshSummaryAndData(true);

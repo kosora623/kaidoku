@@ -4,10 +4,11 @@
  * Gemini Nano（Prompt API）にフォールバックする。
  */
 
+import { normalizeAcronymBase } from '../lang/en/acronym';
 import { loadSettings } from '../settings';
 import type { AiProvider } from '../types';
 import { DEFAULT_CLOUD_MODEL } from './cloud';
-import { getNanoAvailability } from './nano';
+import { getNanoAvailability, NANO_JA_OUTPUT_OPTIONS } from './nano';
 import type { LanguageModelStatic } from './prompt-api';
 import {
   acquireCloudRateLimitSlot,
@@ -28,13 +29,19 @@ export interface WordMeaningResult {
   word: string;
   /** 辞書の見出し語（原形） */
   lemma: string;
-  /** 日本語の品詞（例: 動詞, 名詞, 形容詞） */
+  /** 日本語の品詞（例: 動詞, 名詞, 形容詞, 略語） */
   partOfSpeech: string;
-  /** 文脈に合う簡潔な日本語の意味を 1 つ */
+  /** 文脈に合う簡潔な日本語の意味を 1 つ（ページ内定義が見つからず推測しない場合は空文字） */
   meaningJa: string;
-  provider: AiProvider;
+  provider: AiProvider | 'none';
   modelName: string;
   fromCache: boolean;
+  /** 対象語が略語として処理されたか */
+  isAcronym?: boolean;
+  /** ページ本文から見つかった略語の正式名称（見つからなかった場合は null） */
+  acronymDefinition?: string | null;
+  /** ページ内に定義が見つからず AI が推測した訳か */
+  isGuessed?: boolean;
 }
 
 const CLOUD_WORD_MEANING_SCHEMA: Record<string, unknown> = {
@@ -62,14 +69,29 @@ const SYSTEM_PROMPT = [
   'You are an English-to-Japanese contextual dictionary for academic papers and technical articles.',
   'Given one target English word and the sentence it appears in, return ONLY JSON with:',
   '- "lemma": dictionary base form of the target word in English',
-  '- "partOfSpeech": short Japanese part-of-speech label (e.g. "動詞", "名詞", "形容詞", "副詞", "前置詞")',
+  '- "partOfSpeech": short Japanese part-of-speech label (e.g. "動詞", "名詞", "形容詞", "副詞", "前置詞", "略語")',
   '- "meaningJa": ONE concise, natural Japanese meaning that fits this exact sentence context (no long explanation, max ~25 Japanese characters)',
+  '- If "Page definition of acronym" is provided, you MUST translate that exact full form into a concise, natural Japanese meaning fitting the sentence context (do NOT invent a different expansion), and set "lemma" to the singular base acronym.',
+  '- If "Acronym with no definition on page" is noted, return your best contextual Japanese meaning guess for that acronym.',
 ].join('\n');
 
 const meaningCache = new Map<string, Omit<WordMeaningResult, 'fromCache'>>();
 
-function buildCacheKey(word: string, sentence: string): string {
-  return `${word.trim().toLowerCase()}\n${sentence.replace(/\s+/g, ' ').trim()}`;
+function buildCacheKey(
+  word: string,
+  sentence: string,
+  acronymContext?: {
+    isAcronym: boolean;
+    acronymDefinition: string | null;
+    isGuessed: boolean;
+  },
+): string {
+  const cleanSentence = sentence.replace(/\s+/g, ' ').trim();
+  if (!acronymContext?.isAcronym) {
+    return `${word.trim().toLowerCase()}\n${cleanSentence}`;
+  }
+  const base = normalizeAcronymBase(word);
+  return `acronym:${base}\n${acronymContext.acronymDefinition ?? ''}\n${acronymContext.isGuessed ? 'guess' : 'defined'}\n${cleanSentence}`;
 }
 
 /** テスト用：メモリキャッシュをクリアする */
@@ -111,7 +133,33 @@ function parseMeaningJson(
   return { lemma, partOfSpeech, meaningJa };
 }
 
-function buildUserPrompt(word: string, sentence: string): string {
+interface AcronymPromptContext {
+  isAcronym: boolean;
+  acronymDefinition: string | null;
+  isGuessed: boolean;
+}
+
+function buildUserPrompt(
+  word: string,
+  sentence: string,
+  acronymContext?: AcronymPromptContext,
+): string {
+  if (acronymContext?.isAcronym && acronymContext.acronymDefinition) {
+    return [
+      `Target word: ${word}`,
+      `Page definition of acronym: ${acronymContext.acronymDefinition}`,
+      `Sentence: ${sentence}`,
+      'Translate the page definition into a concise Japanese meaning fitting this sentence context. Return JSON only.',
+    ].join('\n');
+  }
+  if (acronymContext?.isAcronym && acronymContext.isGuessed) {
+    return [
+      `Target word: ${word}`,
+      'Note: Acronym with no definition on page.',
+      `Sentence: ${sentence}`,
+      'Provide your best contextual Japanese meaning guess for this acronym. Return JSON only.',
+    ].join('\n');
+  }
   return `Target word: ${word}\nSentence: ${sentence}\nReturn JSON only.`;
 }
 
@@ -121,11 +169,17 @@ async function lookupWithCloud(
   apiKey: string,
   model = DEFAULT_CLOUD_MODEL,
   signal?: AbortSignal,
+  acronymContext?: AcronymPromptContext,
 ): Promise<Omit<WordMeaningResult, 'fromCache'>> {
   const endpoint = `${GEMINI_API_BASE}/${encodeURIComponent(model)}:generateContent`;
   const bodyJson = JSON.stringify({
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-    contents: [{ role: 'user', parts: [{ text: buildUserPrompt(word, sentence) }] }],
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: buildUserPrompt(word, sentence, acronymContext) }],
+      },
+    ],
     generationConfig: {
       temperature: 0,
       responseMimeType: 'application/json',
@@ -190,6 +244,7 @@ async function lookupWithNano(
   word: string,
   sentence: string,
   signal?: AbortSignal,
+  acronymContext?: AcronymPromptContext,
 ): Promise<Omit<WordMeaningResult, 'fromCache'>> {
   const lm = getLanguageModelGlobal();
   if (!lm) {
@@ -199,16 +254,20 @@ async function lookupWithNano(
   }
 
   const session = await lm.create({
+    ...NANO_JA_OUTPUT_OPTIONS,
     initialPrompts: [{ role: 'system', content: SYSTEM_PROMPT }],
     temperature: 0,
     topK: 1,
   });
 
   try {
-    const rawText = await session.prompt(buildUserPrompt(word, sentence), {
-      responseConstraint: NANO_WORD_MEANING_SCHEMA,
-      ...(signal ? { signal } : {}),
-    });
+    const rawText = await session.prompt(
+      buildUserPrompt(word, sentence, acronymContext),
+      {
+        responseConstraint: NANO_WORD_MEANING_SCHEMA,
+        ...(signal ? { signal } : {}),
+      },
+    );
     const parsed = parseMeaningJson(rawText, word);
     return {
       word,
@@ -225,10 +284,17 @@ export interface LookupWordMeaningOptions {
   apiKey?: string;
   model?: string;
   signal?: AbortSignal;
+  /** 対象単語が略語として探索対象かどうか */
+  isAcronym?: boolean;
+  /** ページ本文から見つかった略語の正式名称（見つからなかった場合は null） */
+  acronymDefinition?: string | null;
+  /** ページ内に定義が見つからない略語でも AI に推測させる場合のみ true（既定 false） */
+  allowAcronymGuess?: boolean;
 }
 
 /**
  * 英文中の対象単語について、文脈に合う日本語の意味を 1 つ返す。
+ * 略語かつページ内に定義が見つからない場合は、既定では AI に推測させず未定義結果を返す。
  */
 export async function lookupWordMeaning(
   word: string,
@@ -241,7 +307,39 @@ export async function lookupWordMeaning(
     throw new Error('単語または元の文が空です。');
   }
 
-  const cacheKey = buildCacheKey(cleanWord, cleanSentence);
+  const cleanDefinition =
+    typeof options?.acronymDefinition === 'string' &&
+    options.acronymDefinition.trim()
+      ? options.acronymDefinition.trim()
+      : null;
+  const isAcronym = Boolean(options?.isAcronym || cleanDefinition);
+  const allowGuess = Boolean(options?.allowAcronymGuess);
+
+  // 略語かつページ内定義が見つからず、推測も明示要求されていない場合は AI を呼ばない
+  if (isAcronym && !cleanDefinition && !allowGuess) {
+    return {
+      word: cleanWord,
+      lemma: normalizeAcronymBase(cleanWord),
+      partOfSpeech: '略語',
+      meaningJa: '',
+      provider: 'none',
+      modelName: 'page-lookup',
+      fromCache: false,
+      isAcronym: true,
+      acronymDefinition: null,
+      isGuessed: false,
+    };
+  }
+
+  const acronymContext: AcronymPromptContext | undefined = isAcronym
+    ? {
+        isAcronym: true,
+        acronymDefinition: cleanDefinition,
+        isGuessed: !cleanDefinition && allowGuess,
+      }
+    : undefined;
+
+  const cacheKey = buildCacheKey(cleanWord, cleanSentence, acronymContext);
   const cached = meaningCache.get(cacheKey);
   if (cached) {
     return { ...cached, fromCache: true };
@@ -253,24 +351,39 @@ export async function lookupWordMeaning(
       ? options.apiKey.trim()
       : settings.geminiApiKey;
 
-  let result: Omit<WordMeaningResult, 'fromCache'>;
+  let baseResult: Omit<WordMeaningResult, 'fromCache'>;
   if (apiKey) {
-    result = await lookupWithCloud(
+    baseResult = await lookupWithCloud(
       cleanWord,
       cleanSentence,
       apiKey,
       options?.model ?? DEFAULT_CLOUD_MODEL,
       options?.signal,
+      acronymContext,
     );
   } else {
-    const availability = await getNanoAvailability();
+    const availability = await getNanoAvailability(NANO_JA_OUTPUT_OPTIONS);
     if (availability !== 'available') {
       throw new Error(
         'Gemini API キーが未設定のため単語の意味を取得できません。設定画面（options.html）から API キーを登録してください。',
       );
     }
-    result = await lookupWithNano(cleanWord, cleanSentence, options?.signal);
+    baseResult = await lookupWithNano(
+      cleanWord,
+      cleanSentence,
+      options?.signal,
+      acronymContext,
+    );
   }
+
+  const result: Omit<WordMeaningResult, 'fromCache'> = acronymContext
+    ? {
+        ...baseResult,
+        isAcronym: true,
+        acronymDefinition: acronymContext.acronymDefinition,
+        isGuessed: acronymContext.isGuessed,
+      }
+    : baseResult;
 
   meaningCache.set(cacheKey, result);
   return { ...result, fromCache: false };

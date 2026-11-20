@@ -201,9 +201,9 @@ export interface RenderNotationHtmlOptions {
   clickableWords?: boolean;
 }
 
-/** テキストノード内の英単語をクリック可能スパンに変換する（[MATH] や記号は素通し） */
+/** テキストノード内の英単語・数字付き略語（GPT-4, 3D 等）をクリック可能スパンに変換する（[MATH] や純粋な数字・記号は素通し） */
 function renderTextWithClickableWords(text: string): string {
-  const pattern = /\[MATH\]|[A-Za-z]+(?:['’-][A-Za-z]+)*/g;
+  const pattern = /\[MATH\]|[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g;
   let result = '';
   let lastIndex = 0;
 
@@ -213,7 +213,7 @@ function renderTextWithClickableWords(text: string): string {
     if (start > lastIndex) {
       result += escapeHtml(text.slice(lastIndex, start));
     }
-    if (token === '[MATH]') {
+    if (token === '[MATH]' || !/[A-Za-z]/.test(token)) {
       result += escapeHtml(token);
     } else {
       const escaped = escapeHtml(token);

@@ -157,6 +157,12 @@
             <strong>タップ時の構造解析での送信</strong>：ページ上でマークした文をタップしたときに、その 1 文を構造解析（S・V・O・C と括弧の図解生成）のために Google Gemini API へ送信します。
           </li>
           <li>
+            <strong>単語の意味取得での送信</strong>：解析パネル内の単語をタップしたときに、その単語と元の 1 文（略語の場合はページ内で見つかった正式名称を含む）を文脈に合う意味の取得のため Google Gemini API へ送信します。
+          </li>
+          <li>
+            <strong>「訳を見る」での日本語訳取得での送信</strong>：解析パネルの「訳を見る」ボタンを押したときに限り、その 1 文とページ内で見つかった略語の定義を日本語訳の生成のため Google Gemini API へ送信します。
+          </li>
+          <li>
             <strong>送信先</strong>：Google の Gemini API（<code>generativelanguage.googleapis.com</code>）のみに送信します。χ読独自の外部サーバーへは一切送信しません。
           </li>
           <li>
@@ -188,7 +194,7 @@
 
       <label class="agree-check">
         <input type="checkbox" id="consent-checkbox" />
-        <span>上記の内容（難文判定での本文候補の送信、およびマークした文をタップした際の 1 文の送信）を理解し、同意します。</span>
+        <span>上記の内容（難文判定・構造解析・単語の意味取得・「訳を見る」日本語訳での Google Gemini API への送信）を理解し、同意します。</span>
       </label>
 
       <div class="actions">
